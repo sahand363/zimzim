@@ -39,7 +39,7 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
   box-shadow:inset 0 2px 0 #ffffff14,inset 0 -6px 14px #0006,0 30px 70px #000a,0 0 0 2px var(--edge)}
 .device::after{content:"";position:absolute;inset:6px;border-radius:38px 38px 50px 50px;pointer-events:none;
   background:repeating-linear-gradient(45deg,#ffffff03 0 2px,transparent 2px 5px)}
-.antenna{position:absolute;left:34px;top:-82px;width:28px;height:110px;border-radius:14px 14px 6px 6px;
+.antenna{touch-action:manipulation;user-select:none;-webkit-user-select:none;position:absolute;left:34px;top:-82px;width:28px;height:110px;border-radius:14px 14px 6px 6px;
   background:repeating-linear-gradient(0deg,#2a2e27 0 7px,#22261f 7px 10px);box-shadow:inset 2px 0 0 #ffffff12,0 6px 14px #0007}
 .antenna .tip{position:absolute;top:8px;left:50%;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#3a1d14;transition:.15s}
 .antenna .tip.tx{background:#ff5b36;box-shadow:0 0 14px #ff5b36}
@@ -383,7 +383,7 @@ async function ensureMic(){
       out[i]= s<0 ? s*0x8000 : s*0x7fff;
     }
     $('meter').style.width=Math.min(100,peak*160)+'%';
-    if (ws.bufferedAmount < 12000) ws.send(out.buffer); // never queue old audio
+    if (ws.bufferedAmount < 128000) ws.send(out.buffer); // keep every chunk: dropping is what made the voice choppy
   };
   return true;
 }
@@ -394,15 +394,19 @@ function play(buf){
   const pcm=u8.slice(1+nl); const i16=new Int16Array(pcm.buffer, 0, pcm.length>>1);
   const ab=ctx.createBuffer(1,i16.length,RATE), ch=ab.getChannelData(0);
   let peak=0; for (let i=0;i<i16.length;i++){ ch[i]=i16[i]/32768; const a=Math.abs(ch[i]); if(a>peak) peak=a; }
-  const st = rx[name] || (rx[name]={next:0, target:0.12, calm:0});
+  const st = rx[name] || (rx[name]={next:0, target:0.15, calm:0});
   const now=ctx.currentTime;
-  // Adaptive jitter buffer: starts ~120 ms ahead, grows a little after each gap (bad network),
-  // shrinks back after 8 s of smooth audio, and only drops audio if far too much piles up.
+  // Jitter buffer that never cuts speech: grows after a gap, and removes lag
+  // only by skipping silent chunks (pauses between words) when we fall behind.
   if (st.next < now+0.005){
-    if (st.next>0 && now-st.next < 1) { st.target=Math.min(0.4, st.target+0.04); st.calm=now; }
+    if (st.next>0 && now-st.next < 1) { st.target=Math.min(0.5, st.target+0.05); st.calm=now; }
     st.next = now+st.target;
-  } else if (st.next > now+st.target+0.45) { markTalker(name, peak); return; }
-  if (now-st.calm > 8 && st.target > 0.1){ st.target=Math.max(0.1, st.target-0.02); st.calm=now; }
+  } else {
+    const ahead = st.next-now;
+    if (ahead > 2.5) st.next = now+st.target;                      // way behind: jump to now
+    else if (ahead > st.target+0.12 && peak < 0.03) { markTalker(name, peak); return; } // skip a silent bit
+  }
+  if (now-st.calm > 10 && st.target > 0.12){ st.target=Math.max(0.12, st.target-0.02); st.calm=now; }
   const s=ctx.createBufferSource(); s.buffer=ab; s.connect(ctx.destination); s.start(st.next); st.next+=ab.duration;
   markTalker(name, peak);
 }
@@ -530,12 +534,20 @@ if (APP && APP.setKeepAlive){
 // ---------- hidden video chat ----------
 const vc = {active:false, pc:null, local:null, role:'', pending:[], facing:'user', ice:null, ringT:null};
 let taps=[];
-document.querySelector('.antenna').addEventListener('pointerdown', () => {
-  const now=Date.now(); taps=taps.filter(t=>now-t<2000); taps.push(now);
-  if (taps.length>=4){ taps=[]; if (!powered || vc.active) return; $('vbox').classList.add('open'); $('vsec').value=''; setTimeout(()=>$('vsec').focus(),50); }
+let vOpenAt=0;
+function closeVbox(){ $('vbox').classList.remove('open'); $('vsec').blur(); }
+document.querySelector('.antenna').addEventListener('click', () => {
+  const now=Date.now(); taps=taps.filter(t=>now-t<2500); taps.push(now);
+  if (taps.length>=4){ taps=[]; if (!powered || vc.active) return;
+    $('vsec').value=''; $('vbox').classList.add('open'); vOpenAt=Date.now(); $('vsec').focus(); }
 });
-$('vsec').addEventListener('blur', ()=>setTimeout(()=>$('vbox').classList.remove('open'),150));
-$('vbox').onsubmit = e => { e.preventDefault(); const v=$('vsec').value; $('vsec').value=''; $('vbox').classList.remove('open'); $('vsec').blur();
+// closes only on a tap somewhere else (or after 30 s), never by itself
+document.addEventListener('pointerdown', e => {
+  if (!$('vbox').classList.contains('open') || Date.now()-vOpenAt < 600) return;
+  if (!$('vbox').contains(e.target)) closeVbox();
+}, true);
+setInterval(()=>{ if ($('vbox').classList.contains('open') && Date.now()-vOpenAt>30000) closeVbox(); }, 2000);
+$('vbox').onsubmit = e => { e.preventDefault(); const v=$('vsec').value; $('vsec').value=''; closeVbox();
   if (v && ws && ws.readyState===1) send({t:'vreq', secret:v}); };
 
 async function iceList(){

@@ -146,7 +146,7 @@ func (h *Hub) broadcastState() {
 }
 
 func (h *Hub) Serve(ws *wsConn, walkieID string) {
-	c := &client{walkieID: walkieID, ws: ws, out: make(chan outMsg, 24), done: make(chan struct{})}
+	c := &client{walkieID: walkieID, ws: ws, out: make(chan outMsg, 128), done: make(chan struct{})}
 	h.mu.Lock()
 	h.clients[c] = true
 	h.mu.Unlock()
