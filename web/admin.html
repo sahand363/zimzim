@@ -64,8 +64,8 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px}
     <div class="grid">
       <div><label>Name (who it's for)</label><input id="nName" placeholder="Sara"></div>
       <div><label>Codes, comma separated</label><input id="nCodes" placeholder="home, 7" autocapitalize="off"></div>
-      <div><label>Username</label><input id="nUser" autocapitalize="off"></div>
-      <div><label>Password</label><div style="display:flex;gap:6px"><input id="nPass"><button type="button" id="gen">↻</button></div></div>
+      <div><label>Username <span style="opacity:.6">(blank = they pick)</span></label><input id="nUser" autocapitalize="off" placeholder="they pick on first open"></div>
+      <div><label>Password</label><div style="display:flex;gap:6px"><input id="nPass" placeholder="they pick on first open"><button type="button" id="gen">↻</button></div></div>
     </div>
     <button class="primary" style="margin-top:14px">Create walkie</button>
     <div class="err" id="nerr"></div>
@@ -94,15 +94,15 @@ async function load(){try{data=await api('walkies');show(true);render();}catch(e
 $('login').onsubmit=async e=>{e.preventDefault();$('lerr').textContent='';
   try{await api('login','POST',{user:$('lu').value.trim(),pass:$('lp').value});load();}catch(err){$('lerr').textContent=err.message;}};
 $('logout').onclick=async()=>{await api('logout','POST');location.reload();};
-$('newBtn').onclick=()=>{$('newForm').classList.remove('hidden');$('nPass').value=gen();$('nUser').value=gen(6);$('nName').focus();};
+$('newBtn').onclick=()=>{$('newForm').classList.remove('hidden');$('nPass').value='';$('nUser').value='';$('nName').focus();};
 $('cancelNew').onclick=()=>$('newForm').classList.add('hidden');
-$('gen').onclick=()=>$('nPass').value=gen();
+$('gen').onclick=()=>{$('nPass').value=gen();if(!$('nUser').value)$('nUser').value=gen(6);};
 const parseCodes=s=>s.split(',').map(x=>x.trim()).filter(Boolean).map(c=>({code:c,on:true}));
 $('newForm').onsubmit=async e=>{e.preventDefault();$('nerr').textContent='';
   const user=$('nUser').value.trim(),pass=$('nPass').value;
   try{data=await api('walkies','POST',{name:$('nName').value,user,pass,codes:parseCodes($('nCodes').value)});
     $('newForm').reset();$('newForm').classList.add('hidden');render();
-    const w=data[data.length-1]; copy(w.link+'\nUser: '+user+'\nPass: '+pass,'Link and login copied');
+    const w=data[data.length-1]; if(user) copy(w.link+'\nUser: '+user+'\nPass: '+pass,'Link and login copied'); else copy(w.link,'Link copied. They pick their login on first open');
   }catch(err){$('nerr').textContent=err.message;}};
 function copy(t,msg){
   if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(()=>toast(msg||'Copied'));return;}
@@ -124,10 +124,10 @@ function render(){
           <div><label>Username</label><input data-f="user" autocapitalize="off"></div>
           <div><label>New password (blank keeps it)</label><div style="display:flex;gap:6px"><input data-f="pass"><button data-a="gen">↻</button></div></div>
         </div>
-        <div class="actions"><button class="primary" data-a="save">Save</button><button data-a="relink">New secret link</button><button data-a="del" style="color:#ff8a70">Delete</button></div>
+        <div class="actions"><button class="primary" data-a="save">Save</button><button data-a="relink">New secret link</button><button data-a="reset">Reset login</button><button data-a="del" style="color:#ff8a70">Delete</button></div>
       </div>`;
     c.querySelector('h2').textContent=w.name;
-    c.querySelector('.sub').textContent='user: '+w.user;
+    c.querySelector('.sub').textContent=w.user?'user: '+w.user:'waiting for first open';
     c.querySelector('.link input').value=w.link;
     const chips=c.querySelector('.chips');
     if(!w.codes.length) chips.innerHTML='<span class="sub">No codes</span>';
@@ -144,6 +144,7 @@ function render(){
       if(a==='addcode'){const v=f('code').value.trim();if(v)update(w.id,{codes:[...w.codes,{code:v,on:true}]});}
       if(a==='save'){const p=f('pass').value;await update(w.id,{name:f('name').value,user:f('user').value,pass:p},'Saved');
         if(p)copy('User: '+f('user').value+'\nPass: '+p,'Saved, new login copied');}
+      if(a==='reset'&&confirm('Clear '+w.name+'\'s login? They pick a new one on next open.'))update(w.id,{resetLogin:true},'Login cleared');
       if(a==='relink'&&confirm('Make a new secret link? The old one stops working.'))update(w.id,{newLink:true},'New link ready');
       if(a==='del'&&confirm('Delete '+w.name+'?')){try{data=await api('walkies/'+w.id,'DELETE');render();}catch(e){toast(e.message);}}
     };

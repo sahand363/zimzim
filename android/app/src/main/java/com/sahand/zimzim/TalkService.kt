@@ -26,13 +26,13 @@ class TalkService : Service() {
             setShowBadge(false)
         })
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val quit = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java)
-            .putExtra(MainActivity.EXTRA_QUIT, true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            .putExtra(MainActivity.EXTRA_QUIT, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val n = Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle("ZimZim is on")
-            .setContentText("Listening on your codes")
+            .setContentText("Listening on your codes. Tap to open.")
             .setOngoing(true)
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Turn off", quit).build())
@@ -51,6 +51,12 @@ class TalkService : Service() {
                 .createWifiLock(mode, "zimzim:wifi").apply { setReferenceCounted(false); acquire() }
         }
         return START_NOT_STICKY
+    }
+
+    // Swiped away from recents: keep going only if "Stay on when I close the app" is on.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (!Walkie.keepAlive(this)) Walkie.shutdown(this)
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {

@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.MutableContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -34,7 +35,9 @@ import android.widget.TextView
 
 class MainActivity : Activity() {
 
-    private var web: WebView? = null
+    private var web: WebView?
+        get() = Walkie.web
+        set(v) { Walkie.web = v }
     private var pendingPermission: PermissionRequest? = null
     private val prefs by lazy { getSharedPreferences("zimzim", Context.MODE_PRIVATE) }
 
@@ -43,7 +46,19 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (intent?.getBooleanExtra(EXTRA_QUIT, false) == true) { quit(); return }
         val link = prefs.getString(KEY_URL, null)
-        if (link.isNullOrBlank()) showSetup(null) else openWalkie(link)
+        Walkie.activity = this
+        if (link.isNullOrBlank()) showSetup(null)
+        else if (Walkie.web != null && Walkie.link == link) attach(Walkie.web!!)
+        else openWalkie(link)
+    }
+
+    /** Put the (possibly still running) walkie WebView on screen. */
+    private fun attach(w: WebView) {
+        (w.context as? MutableContextWrapper)?.baseContext = this
+        (w.parent as? ViewGroup)?.removeView(w)
+        val frame = FrameLayout(this)
+        frame.addView(w, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        setContentView(frame)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -52,9 +67,7 @@ class MainActivity : Activity() {
     }
 
     private fun quit() {
-        stopService(Intent(this, TalkService::class.java))
-        web?.destroy()
-        web = null
+        Walkie.shutdown(this)
         finishAndRemoveTask()
     }
 
@@ -62,8 +75,7 @@ class MainActivity : Activity() {
 
     // ---------- setup screen ----------
     private fun showSetup(error: String?) {
-        web?.let { it.destroy(); web = null }
-        stopService(Intent(this, TalkService::class.java))
+        Walkie.shutdown(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -138,8 +150,11 @@ class MainActivity : Activity() {
     private fun openWalkie(link: String) {
         askPermissions()
         val host = Uri.parse(link).host
-        val w = WebView(this)
+        Walkie.shutdown(this)
+        // Created on the app context so it can outlive this screen when "stay on" is enabled.
+        val w = WebView(MutableContextWrapper(applicationContext))
         web = w
+        Walkie.link = link
         w.setBackgroundColor(Color.parseColor("#0F1110"))
         w.settings.apply {
             javaScriptEnabled = true
@@ -148,7 +163,7 @@ class MainActivity : Activity() {
             cacheMode = WebSettings.LOAD_DEFAULT
             setSupportZoom(false)
         }
-        w.addJavascriptInterface(Bridge(), "ZimZimApp")
+        w.addJavascriptInterface(Bridge(applicationContext), "ZimZimApp")
         w.webViewClient = object : WebViewClient() {
             // Allow the self-signed certificate of YOUR server only (menu option "SSL without a domain").
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -165,20 +180,20 @@ class MainActivity : Activity() {
         }
         w.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
-                runOnUiThread {
-                    if (Uri.parse(request.origin.toString()).host != host) { request.deny(); return@runOnUiThread }
-                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                w.post {
+                    if (Uri.parse(request.origin.toString()).host != host) { request.deny(); return@post }
+                    if (applicationContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
                         request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
                     } else {
-                        pendingPermission = request
-                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+                        val a = Walkie.activity
+                        if (a == null) { request.deny(); return@post }
+                        a.pendingPermission = request
+                        a.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
                     }
                 }
             }
         }
-        val frame = FrameLayout(this)
-        frame.addView(w, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        setContentView(frame)
+        attach(w)
         w.loadUrl(link)
     }
 
@@ -205,25 +220,12 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun startService(on: Boolean) {
-        val i = Intent(this, TalkService::class.java)
-        if (on) {
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-            try { startForegroundService(i) } catch (_: Exception) {}
-        } else stopService(i)
-    }
-
-    inner class Bridge {
-        // Called by the page when the knob turns on/off: keep the app alive with the screen off.
-        @JavascriptInterface fun power(on: Boolean) = runOnUiThread { startService(on) }
-        @JavascriptInterface fun changeLink() = runOnUiThread {
-            AlertDialog.Builder(this@MainActivity)
-                .setMessage("Change the walkie link?")
-                .setPositiveButton("Change") { _, _ -> showSetup(null) }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-        @JavascriptInterface fun isApp() = true
+    fun confirmChangeLink() {
+        AlertDialog.Builder(this)
+            .setMessage("Change the walkie link?")
+            .setPositiveButton("Change") { _, _ -> showSetup(null) }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     @Deprecated("Deprecated in Java")
@@ -233,7 +235,15 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        web?.destroy()
+        if (Walkie.activity === this) Walkie.activity = null
+        val w = Walkie.web
+        if (w != null && !isChangingConfigurations) {
+            if (Walkie.powered && Walkie.keepAlive(this)) {
+                // Keep talking/listening in the background service.
+                (w.parent as? ViewGroup)?.removeView(w)
+                (w.context as? MutableContextWrapper)?.baseContext = applicationContext
+            } else Walkie.shutdown(this)
+        }
         super.onDestroy()
     }
 

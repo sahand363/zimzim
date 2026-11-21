@@ -330,7 +330,14 @@ func (a *App) walkie(w http.ResponseWriter, r *http.Request, wk *Walkie, slug, s
 		})
 	case "api/me":
 		if !authed() {
-			writeJSON(w, 401, map[string]string{"error": "login"})
+			a.store.mu.RLock()
+			setup := wk.Hash == ""
+			a.store.mu.RUnlock()
+			if setup {
+				writeJSON(w, 401, map[string]string{"error": "setup"})
+			} else {
+				writeJSON(w, 401, map[string]string{"error": "login"})
+			}
 			return
 		}
 		a.store.mu.RLock()
@@ -349,13 +356,47 @@ func (a *App) walkie(w http.ResponseWriter, r *http.Request, wk *Walkie, slug, s
 		var in struct{ User, Pass string }
 		json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in)
 		a.store.mu.RLock()
-		ok := in.User == wk.User && checkPass(in.Pass, wk.Hash)
+		ok := wk.Hash != "" && in.User == wk.User && checkPass(in.Pass, wk.Hash)
 		a.store.mu.RUnlock()
 		if !ok {
 			a.lim.fail(ip)
 			writeJSON(w, 401, map[string]string{"error": "Wrong username or password."})
 			return
 		}
+		a.setCookie(w, cookie, a.sess.new(wk.ID), base, 30*24*3600)
+		writeJSON(w, 200, map[string]string{"ok": "1"})
+	case "api/setup":
+		// First open of a walkie without a login: the person chooses their own.
+		if r.Method != http.MethodPost {
+			http.Error(w, "method", 405)
+			return
+		}
+		ip := clientIP(r)
+		if a.lim.blocked(ip) {
+			writeJSON(w, 429, map[string]string{"error": "Too many tries. Wait 10 minutes."})
+			return
+		}
+		var in struct{ User, Pass string }
+		json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in)
+		in.User = strings.TrimSpace(in.User)
+		if in.User == "" || len(in.User) > 64 {
+			writeJSON(w, 400, map[string]string{"error": "Pick a username."})
+			return
+		}
+		if len(in.Pass) < 6 {
+			writeJSON(w, 400, map[string]string{"error": "Password needs at least 6 characters."})
+			return
+		}
+		a.store.mu.Lock()
+		if wk.Hash != "" {
+			a.store.mu.Unlock()
+			a.lim.fail(ip)
+			writeJSON(w, 409, map[string]string{"error": "This walkie already has a login."})
+			return
+		}
+		wk.User, wk.Hash = in.User, hashPass(in.Pass)
+		a.store.saveLocked()
+		a.store.mu.Unlock()
 		a.setCookie(w, cookie, a.sess.new(wk.ID), base, 30*24*3600)
 		writeJSON(w, 200, map[string]string{"ok": "1"})
 	case "api/logout":
@@ -450,6 +491,7 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, base, sub string) {
 		Name, User, Pass string
 		Codes            []Code
 		NewLink          bool
+		ResetLogin       bool
 	}
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&in); err != nil {
@@ -497,6 +539,11 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, base, sub string) {
 				wk.User, kick = u, true
 			}
 			if in.Pass != "" {
+				if wk.User == "" {
+					a.store.mu.Unlock()
+					writeJSON(w, 400, map[string]string{"error": "set a username too"})
+					return
+				}
 				if len(in.Pass) < 6 {
 					a.store.mu.Unlock()
 					writeJSON(w, 400, map[string]string{"error": "password must be at least 6 characters"})
@@ -509,6 +556,9 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, base, sub string) {
 			}
 			if in.NewLink {
 				wk.Slug, kick = randWord(20), true
+			}
+			if in.ResetLogin {
+				wk.User, wk.Hash, kick = "", "", true
 			}
 		case http.MethodDelete:
 			ws := a.store.cfg.Walkies[:0]

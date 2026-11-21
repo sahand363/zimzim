@@ -175,14 +175,22 @@ func normCodes(in []Code) []Code {
 func newWalkie(name, user, pass string, codes []Code) (*Walkie, error) {
 	name = strings.TrimSpace(name)
 	user = strings.TrimSpace(user)
-	if name == "" || user == "" {
-		return nil, errors.New("name and username are required")
+	if name == "" {
+		return nil, errors.New("name is required")
 	}
-	if len(pass) < 6 {
-		return nil, errors.New("password must be at least 6 characters")
+	// Blank username and password: the person picks their own on first open.
+	hash := ""
+	if user != "" || pass != "" {
+		if user == "" {
+			return nil, errors.New("username is required (or leave both blank)")
+		}
+		if len(pass) < 6 {
+			return nil, errors.New("password must be at least 6 characters")
+		}
+		hash = hashPass(pass)
 	}
 	return &Walkie{
-		ID: randHex(6), Name: name, Slug: randWord(20), User: user, Hash: hashPass(pass),
+		ID: randHex(6), Name: name, Slug: randWord(20), User: user, Hash: hash,
 		Codes: normCodes(codes), Created: time.Now().Unix(),
 	}, nil
 }

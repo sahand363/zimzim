@@ -20,6 +20,7 @@ type client struct {
 	ws       *wsConn
 	out      chan outMsg
 	talking  atomic.Bool
+	lastPage time.Time
 	once     sync.Once
 	done     chan struct{}
 }
@@ -142,7 +143,7 @@ func (h *Hub) broadcastState() {
 }
 
 func (h *Hub) Serve(ws *wsConn, walkieID string) {
-	c := &client{walkieID: walkieID, ws: ws, out: make(chan outMsg, 96), done: make(chan struct{})}
+	c := &client{walkieID: walkieID, ws: ws, out: make(chan outMsg, 24), done: make(chan struct{})}
 	h.mu.Lock()
 	h.clients[c] = true
 	h.mu.Unlock()
@@ -236,6 +237,15 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			}
 			h.store.mu.Unlock()
 			h.broadcastState()
+		case "page":
+			if time.Since(c.lastPage) < 4*time.Second {
+				continue
+			}
+			c.lastPage = time.Now()
+			b, _ := json.Marshal(map[string]any{"t": "page", "from": name})
+			for _, p := range h.peersOf(walkieID) {
+				p.send(opText, b)
+			}
 		case "hello":
 			h.broadcastState()
 		}
