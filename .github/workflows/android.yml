@@ -1,0 +1,54 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Read version
+        id: ver
+        run: |
+          echo "name=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+          echo "code=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+      - name: Build APK
+        run: |
+          gradle --no-daemon assembleDebug
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/ZimZim-${{ steps.ver.outputs.name }}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZimZim-${{ steps.ver.outputs.name }}
+          path: android/dist/*.apk
+      # Tag android-v<versionName>; never marked "latest" so the server installer keeps using v* releases.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="android-v${{ steps.ver.outputs.name }}"
+          apk="dist/ZimZim-${{ steps.ver.outputs.name }}.apk"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" --clobber
+          else
+            gh release create "$tag" "$apk" --target "$GITHUB_SHA" --latest=false \
+              --title "ZimZim Android ${{ steps.ver.outputs.name }}" \
+              --notes "Android app (versionCode ${{ steps.ver.outputs.code }}). Install, paste your walkie link, turn the knob."
+          fi

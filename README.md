@@ -31,6 +31,10 @@ The menu shows your admin panel link on top, and lets you change the admin login
 3. The other person opens the link, unlocks it, turns the knob, and holds the orange key to talk.
 4. On Android/iPhone, use **Add to home screen** to keep it like an app.
 
+## Android app
+
+Grab the APK from the latest **android-v…** release, install it, paste your walkie link and turn the knob. It keeps listening with the screen off (a small "ZimZim is on" notification stays while it's on; tap **Turn off** there to stop). It also accepts your own server's self-signed certificate, so SSL without a domain works in the app.
+
 ## Files
 
 - `/usr/local/zimzim/zimzim-server`: the server

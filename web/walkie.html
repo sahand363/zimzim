@@ -170,7 +170,7 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
     </div>
     <button class="ptt" id="ptt" disabled>HOLD TO TALK<small>release to listen</small></button>
   </div>
-  <div class="foot"><a href="#" id="install" class="hidden">Add to home screen</a><a href="#" id="logout">Lock</a></div>
+  <div class="foot"><a href="#" id="install" class="hidden">Add to home screen</a><a href="#" id="logout">Lock</a><a href="#" id="relink" class="hidden">Change link</a></div>
 </div>
 
 <div class="whispers" id="whispers"></div>
@@ -189,6 +189,7 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 const $ = id => document.getElementById(id);
 const base = location.pathname.replace(/[^/]*$/, '');
 const RATE = 16000;
+const APP = window.ZimZimApp || null;
 const WORDS = ['Hii...', 'You there?', 'Call me', 'On my way', 'OK 👍', 'Talk later', '❤️'];
 
 let me = {name:'', codes:[]}, peers = [];
@@ -352,8 +353,10 @@ async function powerOn(){
   await ensureAudio(); powered=true; connect(); render();
   if (window.isSecureContext) ensureMic();
   try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+  if (APP) APP.power(true);
 }
 function powerOff(){
+  if (APP) APP.power(false);
   powered=false; live=false; ptt=false; txOn=false;
   if (ws){ ws.onclose=null; ws.close(); ws=null; }
   clearTimeout(wsTimer); talkers.clear(); peers=[];
@@ -405,6 +408,7 @@ let deferred=null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred=e; $('install').classList.remove('hidden'); });
 $('install').onclick = async e => { e.preventDefault(); if (deferred){ deferred.prompt(); deferred=null; $('install').classList.add('hidden'); } };
 
+if (APP){ $('relink').classList.remove('hidden'); $('relink').onclick=e=>{e.preventDefault(); APP.changeLink();}; }
 boot();
 })();
 </script>
