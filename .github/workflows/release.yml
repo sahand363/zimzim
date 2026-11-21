@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - name: Vet
+        run: go vet ./...
+      - name: Build
+        run: |
+          set -e
+          V=${GITHUB_REF_NAME}
+          mkdir -p dist
+          for t in amd64: arm64: arm:7; do
+            A=${t%%:*}; ARM=${t##*:}
+            NAME=$A; [ "$A" = arm ] && NAME=armv7
+            mkdir -p pkg/$NAME
+            CGO_ENABLED=0 GOOS=linux GOARCH=$A GOARM=$ARM go build -trimpath -ldflags "-s -w -X main.version=$V" -o pkg/$NAME/zimzim-server .
+            cp menu.sh pkg/$NAME/menu.sh
+            tar -czf dist/zimzim-linux-$NAME.tar.gz -C pkg/$NAME zimzim-server menu.sh
+          done
+          ls -la dist
+      - name: Smoke test
+        run: |
+          tar -xzf dist/zimzim-linux-amd64.tar.gz -C /tmp
+          ZIMZIM_CONFIG=/tmp/zz.json /tmp/zimzim-server init -port 18080
+          ZIMZIM_CONFIG=/tmp/zz.json /tmp/zimzim-server version
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.tar.gz
+          generate_release_notes: true

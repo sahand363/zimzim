@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#101211">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>ZimZim</title>
+<style>
+:root{
+  --bg:#0f1110; --body1:#353a32; --body2:#23271f; --edge:#14170f;
+  --lcd-on:#b4cf98; --lcd-off:#3b4535; --ink:#1f2a18; --ink-soft:#3d4d31;
+  --orange:#e2552f; --orange2:#b93c1d; --green:#7ee07a; --muted:#8e968a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);color:#e9ede5;
+  font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif;
+  display:flex;align-items:center;justify-content:center;min-height:100%;overflow-x:hidden;
+  user-select:none;-webkit-user-select:none;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.hidden{display:none!important}
+
+/* ---------- login ---------- */
+.login{width:min(340px,88vw);background:#181b17;border:1px solid #262a24;border-radius:22px;padding:28px 22px;box-shadow:0 20px 60px #0008}
+.login h1{font-size:20px;margin:0 0 4px;letter-spacing:.5px}
+.login p{margin:0 0 18px;color:var(--muted);font-size:13px}
+.login input{width:100%;padding:13px 14px;margin-bottom:10px;border-radius:12px;border:1px solid #2c3129;background:#0f110e;color:#fff;font-size:16px;outline:none}
+.login input:focus{border-color:#59654f}
+.login button{width:100%;padding:13px;border:0;border-radius:12px;background:var(--orange);color:#fff;font-weight:600;font-size:16px}
+.login .err{color:#ff8a70;font-size:13px;min-height:18px;margin-top:8px}
+
+/* ---------- device ---------- */
+.stage{position:relative;padding:96px 0 26px}
+.device{position:relative;width:min(340px,86vw);border-radius:42px 42px 54px 54px;padding:22px 22px 26px;
+  background:linear-gradient(160deg,var(--body1),var(--body2) 70%);
+  box-shadow:inset 0 2px 0 #ffffff14,inset 0 -6px 14px #0006,0 30px 70px #000a,0 0 0 2px var(--edge)}
+.device::after{content:"";position:absolute;inset:6px;border-radius:38px 38px 50px 50px;pointer-events:none;
+  background:repeating-linear-gradient(45deg,#ffffff03 0 2px,transparent 2px 5px)}
+.antenna{position:absolute;left:34px;top:-82px;width:28px;height:110px;border-radius:14px 14px 6px 6px;
+  background:repeating-linear-gradient(0deg,#2a2e27 0 7px,#22261f 7px 10px);box-shadow:inset 2px 0 0 #ffffff12,0 6px 14px #0007}
+.antenna .tip{position:absolute;top:8px;left:50%;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:#3a1d14;transition:.15s}
+.antenna .tip.tx{background:#ff5b36;box-shadow:0 0 14px #ff5b36}
+.antenna .tip.rx{background:var(--green);box-shadow:0 0 14px var(--green)}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.brand{font-weight:800;letter-spacing:3px;font-size:12px;color:#b9c2b2;opacity:.75}
+.knob{width:52px;height:52px;border-radius:50%;border:0;cursor:pointer;position:relative;
+  background:repeating-conic-gradient(#2b2f28 0 8deg,#3b4137 8deg 16deg);box-shadow:0 4px 10px #0009,inset 0 0 0 5px #262a23;transition:transform .35s}
+.knob::after{content:"";position:absolute;top:7px;left:50%;width:4px;height:14px;margin-left:-2px;border-radius:2px;background:#cfd6c8}
+.knob.on{transform:rotate(130deg)}
+.knob.pulse{animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 4px 10px #0009,inset 0 0 0 5px #262a23,0 0 0 0 #e2552f55}50%{box-shadow:0 4px 10px #0009,inset 0 0 0 5px #262a23,0 0 0 9px #e2552f00}}
+
+.lcd{border-radius:16px;padding:12px 14px;min-height:124px;background:var(--lcd-off);color:#566550;
+  font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;box-shadow:inset 0 3px 10px #0008,0 0 0 3px #1a1d17;transition:background .4s,color .4s;position:relative;overflow:hidden}
+.lcd.on{background:linear-gradient(180deg,#c3dca7,var(--lcd-on));color:var(--ink)}
+.lcd .row{display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;text-transform:uppercase;gap:8px}
+.lcd .row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lcd .big{font-size:26px;font-weight:700;letter-spacing:2px;margin:12px 0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lcd .meter{height:6px;border-radius:3px;background:#0002;overflow:hidden}
+.lcd .meter i{display:block;height:100%;width:0;background:var(--ink-soft);transition:width .08s}
+
+.grille{height:82px;margin:16px 6px;border-radius:40px;
+  background:radial-gradient(circle,#0d0f0c 3.2px,transparent 3.8px) 0 0/14px 14px,linear-gradient(#20241d,#1a1e18);
+  box-shadow:inset 0 2px 8px #0009}
+
+.controls{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 16px}
+.switch{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;letter-spacing:2px;color:#b9c2b2;cursor:pointer}
+.switch .track{width:54px;height:30px;border-radius:15px;background:#161914;box-shadow:inset 0 2px 6px #000a;position:relative;transition:.2s}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:linear-gradient(#5b6255,#3d4339);box-shadow:0 2px 4px #0008;transition:.2s}
+.switch.on .track{background:#5a1a0c}
+.switch.on .track::after{left:27px;background:linear-gradient(#ff7b55,var(--orange))}
+.iconbtn{width:44px;height:44px;border-radius:14px;border:0;background:#1b1e18;color:#b9c2b2;box-shadow:0 3px 0 #0b0d0a,inset 0 1px 0 #ffffff10;display:grid;place-items:center;cursor:pointer}
+.iconbtn:active{transform:translateY(2px);box-shadow:0 1px 0 #0b0d0a}
+.iconbtn svg{width:20px;height:20px}
+.chbtn{font:700 12px/1 ui-monospace,monospace;letter-spacing:1px}
+
+.ptt{width:100%;height:92px;border:0;border-radius:46px;cursor:pointer;color:#fff;
+  background:linear-gradient(180deg,#ef6a43,var(--orange) 45%,var(--orange2));
+  box-shadow:0 8px 0 #7d2811,0 14px 24px #0008,inset 0 2px 0 #ffffff40;
+  font-weight:800;letter-spacing:3px;font-size:14px;transition:transform .06s,box-shadow .06s;touch-action:none}
+.ptt small{display:block;font-weight:600;letter-spacing:1px;font-size:10px;opacity:.8;margin-top:4px}
+.ptt.down{transform:translateY(7px);box-shadow:0 1px 0 #7d2811,0 4px 10px #0008,inset 0 2px 0 #ffffff30,0 0 30px #ff5b3666}
+.ptt:disabled{filter:grayscale(.8) brightness(.6)}
+
+.foot{margin-top:16px;text-align:center;font-size:11px;color:#6d7568}
+.foot a{color:#8e968a;text-decoration:none;margin:0 6px}
+
+/* ---------- whispers (incoming text) ---------- */
+.whispers{position:fixed;right:10px;top:16%;width:min(52vw,230px);display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none;z-index:30}
+.whisper{max-width:100%;word-wrap:break-word;opacity:0;transform:translateX(16px);transition:opacity .5s,transform .5s;font-size:13px;color:#dfe6d8;
+  background:#1d211bcc;border:1px solid #ffffff10;border-radius:14px 14px 4px 14px;padding:7px 10px;backdrop-filter:blur(6px)}
+.whisper.show{opacity:.6;transform:none}
+.whisper b{display:block;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#a9b3a2;font-weight:600}
+.whisper.mine{border-radius:14px 14px 14px 4px;opacity:0}
+.whisper.mine.show{opacity:.35}
+
+/* ---------- sheets ---------- */
+.veil{position:fixed;inset:0;background:#0007;z-index:40;opacity:0;pointer-events:none;transition:.2s}
+.veil.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:50%;bottom:0;width:min(420px,100vw);transform:translate(-50%,105%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  background:#171a16;border-radius:24px 24px 0 0;padding:18px 18px calc(22px + env(safe-area-inset-bottom));z-index:50;box-shadow:0 -20px 50px #0009;max-height:78vh;overflow:auto}
+.sheet.open{transform:translate(-50%,0)}
+.sheet h3{margin:2px 0 4px;font-size:16px}
+.sheet .hint{color:var(--muted);font-size:12px;margin:0 0 14px}
+.code{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid #22261f}
+.code .name{flex:1;font-family:ui-monospace,Menlo,monospace;font-size:15px;overflow:hidden;text-overflow:ellipsis}
+.code .del{background:none;border:0;color:#6d7568;font-size:20px;cursor:pointer;padding:0 6px}
+.mini{width:46px;height:26px;border-radius:13px;background:#0e100d;position:relative;cursor:pointer;flex:none;box-shadow:inset 0 2px 5px #000a}
+.mini::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#4a5045;transition:.18s}
+.mini.on{background:#4a1a0d}.mini.on::after{left:23px;background:var(--orange)}
+.add{display:flex;gap:8px;margin-top:14px}
+.add input,.tray input{flex:1;min-width:0;padding:11px 12px;border-radius:12px;border:1px solid #2c3129;background:#0f110e;color:#fff;font-size:16px;outline:none}
+.add button,.tray .send{border:0;border-radius:12px;background:var(--orange);color:#fff;font-weight:700;padding:0 16px;cursor:pointer}
+.peers{margin-top:14px;font-size:12px;color:var(--muted)}
+
+.tray{position:absolute;right:0;bottom:56px;width:250px;background:#171a16;border:1px solid #262a24;border-radius:18px;padding:10px;z-index:20;
+  box-shadow:0 14px 40px #000b;opacity:0;transform:translateY(8px) scale(.97);pointer-events:none;transition:.18s}
+.tray.open{opacity:1;transform:none;pointer-events:auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.chip{border:1px solid #2c3129;background:#1e221c;color:#dfe6d8;border-radius:20px;padding:6px 11px;font-size:13px;cursor:pointer}
+.chip:active{background:#2b3028}
+.tray form{display:flex;gap:6px}
+.tray input{padding:8px 10px;font-size:14px}
+.tray .send{padding:0 12px}
+.ctrlwrap{position:relative}
+.toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:#262a24;color:#fff;padding:9px 14px;border-radius:12px;font-size:13px;z-index:60;opacity:0;transition:.25s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<form class="login hidden" id="login" autocomplete="on">
+  <h1>ZimZim</h1>
+  <p>This walkie is locked.</p>
+  <input id="lu" name="username" placeholder="Username" autocomplete="username" autocapitalize="off" autocorrect="off">
+  <input id="lp" name="password" type="password" placeholder="Password" autocomplete="current-password">
+  <button>Unlock</button>
+  <div class="err" id="lerr"></div>
+</form>
+
+<div class="stage hidden" id="stage">
+  <div class="device">
+    <div class="antenna"><div class="tip" id="tip"></div></div>
+    <div class="top">
+      <div class="brand">ZIMZIM</div>
+      <button class="knob pulse" id="power" aria-label="Power"></button>
+    </div>
+    <div class="lcd" id="lcd">
+      <div class="row"><span id="lName">—</span><span id="lCh">OFF</span></div>
+      <div class="big" id="lBig">OFF</div>
+      <div class="meter"><i id="meter"></i></div>
+      <div class="row" style="margin-top:8px"><span id="lPeers">TURN THE KNOB</span><span id="lNet"></span></div>
+    </div>
+    <div class="grille"></div>
+    <div class="controls">
+      <div class="switch" id="live"><div class="track"></div>LIVE</div>
+      <div style="display:flex;gap:10px">
+        <button class="iconbtn chbtn" id="chBtn" aria-label="Codes">CH</button>
+        <div class="ctrlwrap">
+          <button class="iconbtn" id="msgBtn" aria-label="Words"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.6A8 8 0 1 1 21 12z"/></svg></button>
+          <div class="tray" id="tray">
+            <div class="chips" id="chips"></div>
+            <form id="msgForm"><input id="msgIn" maxlength="200" placeholder="Say something…" autocomplete="off"><button class="send">↑</button></form>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="ptt" id="ptt" disabled>HOLD TO TALK<small>release to listen</small></button>
+  </div>
+  <div class="foot"><a href="#" id="install" class="hidden">Add to home screen</a><a href="#" id="logout">Lock</a></div>
+</div>
+
+<div class="whispers" id="whispers"></div>
+<div class="veil" id="veil"></div>
+<div class="sheet" id="sheet">
+  <h3>Codes</h3>
+  <p class="hint">You hear anyone whose walkie has the same code switched on.</p>
+  <div id="codes"></div>
+  <form class="add" id="addForm"><input id="addIn" maxlength="32" placeholder="New code" autocomplete="off" autocapitalize="off"><button>Add</button></form>
+  <div class="peers" id="peerList"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const base = location.pathname.replace(/[^/]*$/, '');
+const RATE = 16000;
+const WORDS = ['Hii...', 'You there?', 'Call me', 'On my way', 'OK 👍', 'Talk later', '❤️'];
+
+let me = {name:'', codes:[]}, peers = [];
+let powered = false, live = false, ptt = false, txOn = false;
+let ws = null, wsTimer = null, retry = 0;
+let ctx = null, mic = null, proc = null, wakeLock = null;
+const rx = {};           // sender -> {next, until}
+let talkers = new Set(); // names currently talking to me
+
+function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2200); }
+
+// ---------- auth ----------
+async function boot(){
+  const r = await fetch(base+'api/me', {credentials:'same-origin'});
+  if (r.status === 401){ $('login').classList.remove('hidden'); $('lu').focus(); return; }
+  me = await r.json();
+  $('stage').classList.remove('hidden');
+  render();
+}
+$('login').onsubmit = async e => {
+  e.preventDefault(); $('lerr').textContent='';
+  const r = await fetch(base+'api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:$('lu').value.trim(),pass:$('lp').value})});
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok){ $('lerr').textContent = j.error || 'Could not unlock.'; return; }
+  $('login').classList.add('hidden'); boot();
+};
+$('logout').onclick = async e => { e.preventDefault(); powerOff(); await fetch(base+'api/logout',{method:'POST'}); location.reload(); };
+
+// ---------- rendering ----------
+function onCodes(){ return me.codes.filter(c=>c.on).map(c=>c.code); }
+function render(){
+  const lcd=$('lcd'), oc=onCodes();
+  lcd.classList.toggle('on', powered);
+  $('lName').textContent = me.name || '—';
+  $('power').classList.toggle('on', powered);
+  $('power').classList.toggle('pulse', !powered);
+  $('ptt').disabled = !powered;
+  $('live').classList.toggle('on', live);
+  const tip=$('tip'); tip.className='tip'+(txOn?' tx':(talkers.size?' rx':''));
+  if (!powered){
+    $('lCh').textContent='OFF'; $('lBig').textContent='OFF'; $('lPeers').textContent='TURN THE KNOB'; $('lNet').textContent='';
+  } else {
+    $('lCh').textContent = oc.length ? 'CH '+(oc.length>2? oc.slice(0,2).join(' · ')+' +'+(oc.length-2) : oc.join(' · ')) : 'NO CODE';
+    let big='STANDBY';
+    if (!window.isSecureContext) big='NEED HTTPS';
+    else if (txOn) big = live&&!ptt ? '● LIVE' : '● TALK';
+    else if (talkers.size) big='◀ '+[...talkers][0];
+    else if (!oc.length) big='ADD A CODE';
+    $('lBig').textContent=big;
+    $('lPeers').textContent = peers.length ? peers.length+' ON AIR · '+peers.map(p=>p.name).join(', ') : 'NOBODY ON AIR';
+    $('lNet').textContent = ws && ws.readyState===1 ? '▂▄▆' : '…';
+  }
+  // codes sheet
+  const box=$('codes'); box.innerHTML='';
+  if (!me.codes.length) box.innerHTML='<p class="hint">No codes yet. Add one and share it with the other walkie.</p>';
+  me.codes.forEach((c,i)=>{
+    const row=document.createElement('div'); row.className='code';
+    const n=document.createElement('div'); n.className='name'; n.textContent=c.code;
+    const t=document.createElement('div'); t.className='mini'+(c.on?' on':''); t.onclick=()=>{ c.on=!c.on; saveCodes(); };
+    const d=document.createElement('button'); d.className='del'; d.textContent='×'; d.onclick=()=>{ me.codes.splice(i,1); saveCodes(); };
+    row.append(n,t,d); box.append(row);
+  });
+  $('peerList').textContent = peers.length ? 'On air: '+peers.map(p=>p.name+' ('+p.codes.join(', ')+')').join(' · ') : '';
+}
+
+// ---------- codes ----------
+function saveCodes(){ render(); send({t:'codes', codes:me.codes}); if(!ws||ws.readyState!==1) toast('Turn on to save codes'); }
+$('addForm').onsubmit = e => { e.preventDefault(); const v=$('addIn').value.trim(); if(!v) return;
+  if (me.codes.some(c=>c.code.toLowerCase()===v.toLowerCase())) { toast('Already added'); return; }
+  me.codes.push({code:v,on:true}); $('addIn').value=''; saveCodes(); };
+function openSheet(o){ $('sheet').classList.toggle('open',o); $('veil').classList.toggle('open',o); }
+$('chBtn').onclick = () => openSheet(true);
+$('veil').onclick = () => openSheet(false);
+
+// ---------- socket ----------
+function send(o){ if (ws && ws.readyState===1) ws.send(JSON.stringify(o)); }
+function connect(){
+  clearTimeout(wsTimer);
+  const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+base+'ws';
+  ws = new WebSocket(url); ws.binaryType='arraybuffer';
+  ws.onopen = () => { retry=0; send({t:'hello'}); if (txOn) send({t:'talk',on:true}); render(); };
+  ws.onclose = () => { talkers.clear(); render(); if (powered){ wsTimer=setTimeout(connect, Math.min(8000, 500*2**retry++)); } };
+  ws.onmessage = ev => {
+    if (typeof ev.data !== 'string'){ play(ev.data); return; }
+    let m; try { m=JSON.parse(ev.data); } catch { return; }
+    if (m.t==='state'){ me.name=m.name; me.codes=m.codes||[]; peers=m.peers||[]; talkers=new Set(peers.filter(p=>p.talking).map(p=>p.name)); render(); }
+    else if (m.t==='talk'){
+      if (m.on){ if(!talkers.has(m.from) && navigator.vibrate) navigator.vibrate(25); talkers.add(m.from); }
+      else { talkers.delete(m.from); chirp(false); }
+      render();
+    }
+    else if (m.t==='msg'){ whisper(m.from, m.text, false); if (navigator.vibrate) navigator.vibrate([20,60,20]); }
+  };
+}
+
+// ---------- audio ----------
+async function ensureAudio(){
+  if (!ctx){ ctx = new (window.AudioContext||window.webkitAudioContext)(); }
+  if (ctx.state==='suspended') await ctx.resume();
+}
+async function ensureMic(){
+  if (mic) return true;
+  if (!navigator.mediaDevices || !window.isSecureContext){ toast('The mic needs HTTPS. Get SSL from the server menu.'); return false; }
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
+  } catch(e){ toast('Mic blocked. Allow it in the browser settings.'); return false; }
+  const src = ctx.createMediaStreamSource(mic);
+  proc = ctx.createScriptProcessor(2048,1,1);
+  const mute = ctx.createGain(); mute.gain.value=0;
+  src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+  proc.onaudioprocess = e => {
+    if (!txOn || !ws || ws.readyState!==1) { $('meter').style.width='0'; return; }
+    const inp=e.inputBuffer.getChannelData(0), ratio=ctx.sampleRate/RATE, n=Math.floor(inp.length/ratio);
+    const out=new Int16Array(n); let peak=0;
+    for (let i=0;i<n;i++){
+      const a=Math.floor(i*ratio), b=Math.min(inp.length, Math.floor((i+1)*ratio));
+      let s=0; for (let j=a;j<b;j++) s+=inp[j]; s/= (b-a)||1;
+      s=Math.max(-1,Math.min(1,s)); if (Math.abs(s)>peak) peak=Math.abs(s);
+      out[i]= s<0 ? s*0x8000 : s*0x7fff;
+    }
+    $('meter').style.width=Math.min(100,peak*160)+'%';
+    if (ws.bufferedAmount < 96000) ws.send(out.buffer);
+  };
+  return true;
+}
+function play(buf){
+  if (!ctx || !powered) return;
+  const u8=new Uint8Array(buf); const nl=u8[0]; if (u8.length<1+nl+2) return;
+  const name=new TextDecoder().decode(u8.subarray(1,1+nl));
+  const pcm=u8.slice(1+nl); const i16=new Int16Array(pcm.buffer, 0, pcm.length>>1);
+  const ab=ctx.createBuffer(1,i16.length,RATE), ch=ab.getChannelData(0);
+  let peak=0; for (let i=0;i<i16.length;i++){ ch[i]=i16[i]/32768; const a=Math.abs(ch[i]); if(a>peak) peak=a; }
+  const st = rx[name] || (rx[name]={next:0});
+  const now=ctx.currentTime;
+  if (st.next < now+0.05 || st.next > now+0.9) st.next = now+0.12;
+  const s=ctx.createBufferSource(); s.buffer=ab; s.connect(ctx.destination); s.start(st.next); st.next+=ab.duration;
+  if (!txOn) $('meter').style.width=Math.min(100,peak*160)+'%';
+  if (!talkers.has(name)){ talkers.add(name); render(); }
+  clearTimeout(st.t); st.t=setTimeout(()=>{ talkers.delete(name); if(!txOn) $('meter').style.width='0'; render(); }, 1200);
+}
+function chirp(mine){
+  if (!ctx || !powered) return;
+  const o=ctx.createOscillator(), g=ctx.createGain(), t=ctx.currentTime;
+  o.type='square'; o.frequency.setValueAtTime(mine?1400:1800,t); o.frequency.setValueAtTime(mine?1000:1300,t+.06);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(mine?0.025:0.05,t+.01); g.gain.exponentialRampToValueAtTime(0.0001,t+.14);
+  o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t+.15);
+}
+
+// ---------- transmit state ----------
+async function setTx(){
+  const want = powered && (live || ptt) && onCodes().length>0;
+  if (want && !(await ensureMic())) { live=false; ptt=false; $('ptt').classList.remove('down'); render(); return; }
+  if (want===txOn) { render(); return; }
+  txOn=want; send({t:'talk',on:txOn});
+  if (!txOn){ chirp(true); $('meter').style.width='0'; }
+  render();
+}
+
+// ---------- power ----------
+async function powerOn(){
+  await ensureAudio(); powered=true; connect(); render();
+  if (window.isSecureContext) ensureMic();
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+}
+function powerOff(){
+  powered=false; live=false; ptt=false; txOn=false;
+  if (ws){ ws.onclose=null; ws.close(); ws=null; }
+  clearTimeout(wsTimer); talkers.clear(); peers=[];
+  if (mic){ mic.getTracks().forEach(t=>t.stop()); mic=null; if(proc) proc.disconnect(); proc=null; }
+  if (wakeLock){ wakeLock.release().catch(()=>{}); wakeLock=null; }
+  render();
+}
+$('power').onclick = () => powered ? powerOff() : powerOn();
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState==='visible' && powered){
+    try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+    if (ctx && ctx.state==='suspended') ctx.resume();
+    if (!ws || ws.readyState>1) connect();
+  }
+});
+
+// ---------- buttons ----------
+$('live').onclick = () => { if (!powered){ toast('Turn the knob first'); return; } if(!live && !onCodes().length){ openSheet(true); return; } live=!live; setTx(); };
+const P=$('ptt');
+const down = e => { e.preventDefault(); if (!powered) return; if(!onCodes().length){ openSheet(true); return; } P.setPointerCapture && e.pointerId!=null && P.setPointerCapture(e.pointerId); ptt=true; P.classList.add('down'); if(navigator.vibrate) navigator.vibrate(15); setTx(); };
+const up = e => { if (!ptt) return; ptt=false; P.classList.remove('down'); setTx(); };
+P.addEventListener('pointerdown', down);
+P.addEventListener('pointerup', up); P.addEventListener('pointercancel', up); P.addEventListener('lostpointercapture', up);
+P.addEventListener('contextmenu', e=>e.preventDefault());
+document.addEventListener('keydown', e => { if (e.code==='Space' && !e.repeat && document.activeElement.tagName!=='INPUT'){ down(e); } });
+document.addEventListener('keyup', e => { if (e.code==='Space' && document.activeElement.tagName!=='INPUT'){ up(e); } });
+
+// ---------- words ----------
+const tray=$('tray');
+WORDS.forEach(w => { const c=document.createElement('button'); c.type='button'; c.className='chip'; c.textContent=w; c.onclick=()=>sendWord(w); $('chips').append(c); });
+$('msgBtn').onclick = e => { e.stopPropagation(); tray.classList.toggle('open'); };
+document.addEventListener('pointerdown', e => { if (!tray.contains(e.target) && e.target.closest('#msgBtn')==null) tray.classList.remove('open'); });
+$('msgForm').onsubmit = e => { e.preventDefault(); const v=$('msgIn').value.trim(); if(v){ sendWord(v); $('msgIn').value=''; } };
+function sendWord(w){
+  if (!powered || !ws || ws.readyState!==1){ toast('Turn the knob first'); return; }
+  if (!peers.length){ toast('Nobody on air'); return; }
+  send({t:'msg',text:w}); whisper('you', w, true); tray.classList.remove('open');
+}
+function whisper(from, text, mine){
+  const el=document.createElement('div'); el.className='whisper'+(mine?' mine':'');
+  const b=document.createElement('b'); b.textContent=from; el.append(b, document.createTextNode(text));
+  $('whispers').append(el); requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=>el.remove(),600); }, mine?4000:14000);
+  const all=$('whispers').children; if (all.length>5) all[0].remove();
+}
+
+// ---------- install prompt ----------
+let deferred=null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred=e; $('install').classList.remove('hidden'); });
+$('install').onclick = async e => { e.preventDefault(); if (deferred){ deferred.prompt(); deferred=null; $('install').classList.add('hidden'); } };
+
+boot();
+})();
+</script>
+</body>
+</html>
