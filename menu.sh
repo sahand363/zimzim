@@ -73,20 +73,56 @@ get_ssl(){
   if [ -n "$rip" ] && [ "$rip" != "$(public_ip)" ]; then
     printf "  %s%s points to %s, this server is %s (fine if it's behind a CDN with proxy off).%s\n" "$OR" "$d" "$rip" "$(public_ip)" "$C0"
   fi
-  if port_busy 80; then err "Port 80 is busy. Let's Encrypt needs it free for a minute."; return; fi
-  if [ ! -x ~/.acme.sh/acme.sh ]; then
+  # Reuse a certificate acme.sh already has for this domain (e.g. from another panel).
+  local have=""
+  [ -f ~/.acme.sh/"${d}_ecc"/fullchain.cer ] && have=ecc
+  [ -z "$have" ] && [ -f ~/.acme.sh/"$d"/fullchain.cer ] && have=rsa
+  local mode="" unit=""
+  if [ -n "$have" ]; then
+    ok "Found an existing certificate for $d"; mode=reuse
+  elif ! port_busy 80; then mode=standalone
+  elif ! port_busy 443; then mode=alpn
+  else
+    local pid; pid=$(ss -ltnpH "( sport = :80 )" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2)
+    unit=$(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')
+    local pname; pname=$(ps -o comm= -p "$pid" 2>/dev/null)
+    printf "  %sPort 80 is used by %s%s%s.%s\n" "$OR" "${pname:-another app}" "${unit:+ ($unit)}" "" "$C0"
+    echo "  1) Pause it for a minute, get the certificate, start it again"
+    echo "  2) Use certificate files I already have"
+    echo "  0) Cancel"
+    ask "Choose"
+    case "$REPLY" in
+      1) [ -n "$unit" ] && [[ "$unit" == *.service ]] || { err "Can't tell which service holds port 80. Stop it by hand and retry."; return; }
+         mode=standalone ;;
+      2) ask "Full path to fullchain/cert file"; local cf=$REPLY
+         ask "Full path to private key file"; local kf=$REPLY
+         [ -r "$cf" ] && [ -r "$kf" ] || { err "Can't read those files"; return; }
+         zz set-tls "$d" "$cf" "$kf" >/dev/null && ok "SSL set with your files"
+         maybe_443; restart; return ;;
+      *) return ;;
+    esac
+  fi
+  if [ "$mode" != reuse ] && [ ! -x ~/.acme.sh/acme.sh ]; then
     ask "Email for Let's Encrypt (optional)"; email=${REPLY:-zimzim@$d}
     echo "  Installing acme.sh…"
     curl -fsSL https://get.acme.sh | sh -s email="$email" >/tmp/zimzim-acme.log 2>&1 || { err "acme.sh install failed (/tmp/zimzim-acme.log)"; return; }
   fi
   command -v socat >/dev/null || { command -v apt-get >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y socat >/dev/null 2>&1; }
-  echo "  Requesting certificate…"
-  ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
-  if ! ~/.acme.sh/acme.sh --issue -d "$d" --standalone --keylength ec-256 >>/tmp/zimzim-acme.log 2>&1; then
-    grep -q "Domains not changed" /tmp/zimzim-acme.log || { err "Certificate failed. Check DNS and port 80 (/tmp/zimzim-acme.log)"; return; }
+  if [ "$mode" != reuse ]; then
+    echo "  Requesting certificate…"
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt >/dev/null 2>&1
+    local how="--standalone"; [ "$mode" = alpn ] && how="--alpn"
+    local pre="" post=""
+    if [ -n "$unit" ]; then pre="systemctl stop $unit"; post="systemctl start $unit"; fi
+    : > /tmp/zimzim-acme.log
+    if ! ~/.acme.sh/acme.sh --issue -d "$d" $how --keylength ec-256 ${pre:+--pre-hook "$pre"} ${post:+--post-hook "$post"} >>/tmp/zimzim-acme.log 2>&1; then
+      grep -q "Domains not changed\|Skipping" /tmp/zimzim-acme.log || { [ -n "$unit" ] && systemctl start "$unit"; err "Certificate failed. Check the domain's DNS points here (/tmp/zimzim-acme.log)"; return; }
+    fi
+    have=ecc
   fi
+  local eccflag=""; [ "$have" = ecc ] && eccflag="--ecc"
   mkdir -p "$CERTS"
-  ~/.acme.sh/acme.sh --install-cert -d "$d" --ecc --key-file "$CERTS/key.pem" --fullchain-file "$CERTS/cert.pem" \
+  ~/.acme.sh/acme.sh --install-cert -d "$d" $eccflag --key-file "$CERTS/key.pem" --fullchain-file "$CERTS/cert.pem" \
     --reloadcmd "systemctl restart zimzim" >>/tmp/zimzim-acme.log 2>&1 || { err "Install cert failed"; return; }
   zz set-tls "$d" "$CERTS/cert.pem" "$CERTS/key.pem" >/dev/null && ok "SSL ready for $d (auto-renews)"
   maybe_443
