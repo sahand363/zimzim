@@ -403,11 +403,12 @@ function play(buf){
     st.next = now+st.target;
   } else {
     const ahead = st.next-now;
-    if (ahead > 2.5) st.next = now+st.target;                      // way behind: jump to now
+    if (ahead > 1.5) { (st.src||[]).forEach(x=>{try{x.stop()}catch{}}); st.src=[]; st.next = now+st.target; } // way behind: drop the backlog, never overlap
     else if (ahead > st.target+0.12 && peak < 0.03) { markTalker(name, peak); return; } // skip a silent bit
   }
   if (now-st.calm > 10 && st.target > 0.12){ st.target=Math.max(0.12, st.target-0.02); st.calm=now; }
   const s=ctx.createBufferSource(); s.buffer=ab; s.connect(ctx.destination); s.start(st.next); st.next+=ab.duration;
+  st.src=(st.src||[]).filter(x=>x.endAt>now); s.endAt=st.next; st.src.push(s);
   markTalker(name, peak);
 }
 function markTalker(name, peak){
@@ -569,9 +570,20 @@ async function makePC(){
   vc.local.getTracks().forEach(t=>pc.addTrack(t, vc.local));
   pc.onicecandidate = e => { if (e.candidate) send({t:'vsig', data:{cand:e.candidate}}); };
   pc.ontrack = e => { $('rv').srcObject = e.streams[0]; $('vst').textContent=''; };
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState==='connected') $('vst').textContent='';
-    if (pc.connectionState==='failed'){ $('vst').textContent='Could not connect'; setTimeout(()=>hangup(true), 2500); }
+  let lostT=null, restarted=false;
+  pc.onconnectionstatechange = async () => {
+    if (vc.pc!==pc) return;
+    const st=pc.connectionState;
+    if (st==='connected'){ $('vst').textContent=''; clearTimeout(lostT); lostT=null; restarted=false; return; }
+    if (st==='disconnected' || st==='failed'){
+      $('vst').textContent='Reconnecting…';
+      if (vc.role==='caller' && !restarted){ restarted=true;   // try a fresh network path once
+        try { const o=await pc.createOffer({iceRestart:true}); await pc.setLocalDescription(o); send({t:'vsig', data:{sdp:pc.localDescription}}); } catch {} }
+      if (!lostT) lostT=setTimeout(()=>{ if (vc.pc===pc && pc.connectionState!=='connected'){
+        const relay=(vc.ice||[]).some(x=>String(x.urls).includes('turn:'));
+        toast(relay ? 'Call lost. Network too weak.' : 'Call lost. Run option 11 (Video relay) in the server menu.');
+        hangup(true); } }, 15000);
+    }
   };
   return pc;
 }
@@ -580,9 +592,9 @@ async function onSig(d){
   if (d.sdp){
     await pc.setRemoteDescription(d.sdp);
     if (d.sdp.type==='offer'){ const a=await pc.createAnswer(); await pc.setLocalDescription(a); send({t:'vsig', data:{sdp:pc.localDescription}}); }
-    for (const c of vc.pending.splice(0)) { try { await pc.addIceCandidate(c); } catch {} }
+    for (const c of vc.pending.splice(0)) { try { await pc.addIceCandidate(c.cand||c); } catch {} }
   } else if (d.cand){
-    if (pc.remoteDescription) { try { await pc.addIceCandidate(d.cand); } catch {} } else vc.pending.push(d.cand);
+    if (pc.remoteDescription) { try { await pc.addIceCandidate(d.cand); } catch {} } else vc.pending.push(d);
   }
 }
 function stopRing(){ clearInterval(vc.ringT); vc.ringT=null; $('vin').classList.remove('open'); }

@@ -43,10 +43,31 @@ type Hub struct {
 	mu      sync.RWMutex
 	clients map[*client]bool
 	calls   *callState
+	vmu     sync.Mutex
+	voice   map[string]voiceOwner // walkie -> the one connection whose audio we pass on
+}
+
+type voiceOwner struct {
+	c    *client
+	last time.Time
+}
+
+// voiceFrom lets only one connection per walkie send audio at a time, so a walkie that is
+// open twice (app + browser, or an old app window) never plays as two overlapping voices.
+func (h *Hub) voiceFrom(c *client) bool {
+	h.vmu.Lock()
+	defer h.vmu.Unlock()
+	now := time.Now()
+	o := h.voice[c.walkieID]
+	if o.c != nil && o.c != c && now.Sub(o.last) < 1500*time.Millisecond {
+		return false
+	}
+	h.voice[c.walkieID] = voiceOwner{c, now}
+	return true
 }
 
 func NewHub(s *Store) *Hub {
-	return &Hub{store: s, clients: map[*client]bool{}, calls: newCallState()}
+	return &Hub{store: s, clients: map[*client]bool{}, calls: newCallState(), voice: map[string]voiceOwner{}}
 }
 
 // shared returns the codes that are ON on both walkies (case-insensitive).
@@ -192,7 +213,7 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			return
 		}
 		if op == opBinary {
-			if len(data) == 0 || len(data) > 16000 {
+			if len(data) == 0 || len(data) > 16000 || !h.voiceFrom(c) {
 				continue
 			}
 			nb := []byte(name)

@@ -69,8 +69,12 @@ func (h *Hub) handleCall(c *client, name, typ string, raw []byte) {
 			sendJSON(c, map[string]any{"t": "vfail", "why": "secret"})
 			return
 		}
-		busy := cs.partner[c] != nil || cs.ringing[c] != nil
+		stale := cs.partner[c] != nil || cs.ringing[c] != nil
 		cs.mu.Unlock()
+		if stale { // the caller's old call is clearly over: clean it up instead of saying busy
+			h.endCall(c, "hangup")
+		}
+		busy := false
 		if busy {
 			sendJSON(c, map[string]any{"t": "vfail", "why": "busy"})
 			return
@@ -84,6 +88,15 @@ func (h *Hub) handleCall(c *client, name, typ string, raw []byte) {
 		if len(ids) != 1 {
 			sendJSON(c, map[string]any{"t": "vfail", "why": "count", "n": len(ids)})
 			return
+		}
+		// Someone still "in a call" with this same walkie: that call already died, clear it.
+		for _, p := range peers {
+			cs.mu.Lock()
+			q := cs.partner[p]
+			cs.mu.Unlock()
+			if q != nil && q.walkieID == c.walkieID {
+				h.endCall(p, "hangup")
+			}
 		}
 		cs.mu.Lock()
 		var ring []*client
