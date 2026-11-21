@@ -11,12 +11,11 @@ android {
         applicationId = "com.sahand.zimzim"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.2.0"
     }
 
-    // Release key comes from GitHub secrets (ZZ_KEYSTORE_B64 / ZZ_KEYSTORE_PASS) and never lives in the repo.
-    // Until those secrets exist, builds fall back to the old committed key so updates still install.
+    // Release key comes only from GitHub secrets (ZZ_KEYSTORE_B64 / ZZ_KEYSTORE_PASS); it never lives in the repo.
     val ks = System.getenv("ZZ_KEYSTORE")
     val ksPass = System.getenv("ZZ_KEYSTORE_PASS")
     signingConfigs {
@@ -27,19 +26,13 @@ android {
                 storePassword = ksPass
                 keyAlias = "zimzim"
                 keyPassword = ksPass
-            } else {
-                storeFile = rootProject.file("zimzim.p12")
-                storeType = "pkcs12"
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
             }
         }
     }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            if (!ks.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
         }
     }
     buildFeatures { buildConfig = true }

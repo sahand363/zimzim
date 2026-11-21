@@ -73,6 +73,25 @@ func main() {
 	case "clear-tls":
 		mutate(cfgPath, func(c *Config) error { c.Domain, c.Cert, c.Key = "", "", ""; return nil })
 		fmt.Println("TLS disabled.")
+	case "set-turn":
+		if len(args) < 2 {
+			die("usage: set-turn SECRET PORT [HOST]")
+		}
+		p, err := strconv.Atoi(args[1])
+		if err != nil || p < 1 || p > 65535 {
+			die("invalid port")
+		}
+		mutate(cfgPath, func(c *Config) error {
+			c.TurnSecret, c.TurnPort, c.TurnHost = args[0], p, ""
+			if len(args) > 2 {
+				c.TurnHost = args[2]
+			}
+			return nil
+		})
+		fmt.Println("Video relay set.")
+	case "clear-turn":
+		mutate(cfgPath, func(c *Config) error { c.TurnSecret, c.TurnPort, c.TurnHost = "", 0, ""; return nil })
+		fmt.Println("Video relay removed.")
 	case "new-admin-path":
 		mutate(cfgPath, func(c *Config) error { c.AdminPath = randWord(12); return nil })
 		fmt.Println("Admin link changed.")
@@ -82,7 +101,7 @@ func main() {
 			die(err.Error())
 		}
 		c := s.cfg
-		fmt.Printf("url=%s\nuser=%s\nport=%d\ndomain=%s\ntls=%v\nwalkies=%d\n", adminURL(c, ""), c.AdminUser, c.Port, c.Domain, c.Cert != "", len(c.Walkies))
+		fmt.Printf("url=%s\nuser=%s\nport=%d\ndomain=%s\ntls=%v\nwalkies=%d\nturn=%v\nturn_port=%d\n", adminURL(c, ""), c.AdminUser, c.Port, c.Domain, c.Cert != "", len(c.Walkies), c.TurnSecret != "", c.TurnPort)
 	case "url":
 		s, err := LoadStore(cfgPath)
 		if err != nil {
@@ -102,7 +121,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("zimzim " + version + "\ncommands: serve | init [-port N] | set-admin USER PASS | set-port N | set-tls DOMAIN CERT KEY | clear-tls | new-admin-path | info | url [HOST] | version")
+	fmt.Println("zimzim " + version + "\ncommands: serve | init [-port N] | set-admin USER PASS | set-port N | set-tls DOMAIN CERT KEY | clear-tls | set-turn SECRET PORT [HOST] | clear-turn | new-admin-path | info | url [HOST] | version")
 }
 
 func die(m string) { fmt.Fprintln(os.Stderr, m); os.Exit(1) }
@@ -405,6 +424,19 @@ func (a *App) walkie(w http.ResponseWriter, r *http.Request, wk *Walkie, slug, s
 		}
 		a.setCookie(w, cookie, "", base, -1)
 		writeJSON(w, 200, map[string]string{"ok": "1"})
+	case "api/ice":
+		if !authed() {
+			writeJSON(w, 401, map[string]string{"error": "login"})
+			return
+		}
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		a.store.mu.RLock()
+		ice := iceServers(a.store.cfg, host, wk.ID)
+		a.store.mu.RUnlock()
+		writeJSON(w, 200, map[string]any{"iceServers": ice})
 	case "ws":
 		if !authed() {
 			http.Error(w, "login", 401)
@@ -492,12 +524,39 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, base, sub string) {
 		Codes            []Code
 		NewLink          bool
 		ResetLogin       bool
+		VideoSecret      string
 	}
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&in); err != nil {
 			writeJSON(w, 400, map[string]string{"error": "bad request"})
 			return
 		}
+	}
+	if sub == "api/settings" {
+		switch r.Method {
+		case http.MethodGet:
+			a.store.mu.RLock()
+			vs := a.store.cfg.VideoSecret
+			if vs == "" {
+				vs = "4"
+			}
+			writeJSON(w, 200, map[string]any{"videoSecret": vs, "turn": a.store.cfg.TurnSecret != ""})
+			a.store.mu.RUnlock()
+		case http.MethodPut:
+			v := strings.TrimSpace(in.VideoSecret)
+			if v == "" || len(v) > 64 {
+				writeJSON(w, 400, map[string]string{"error": "secret can't be empty"})
+				return
+			}
+			a.store.mu.Lock()
+			a.store.cfg.VideoSecret = v
+			a.store.saveLocked()
+			a.store.mu.Unlock()
+			writeJSON(w, 200, map[string]any{"videoSecret": v})
+		default:
+			http.Error(w, "method", 405)
+		}
+		return
 	}
 	if sub == "api/walkies" {
 		switch r.Method {

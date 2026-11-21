@@ -39,7 +39,7 @@ jobs:
             export ZZ_KEYSTORE="$RUNNER_TEMP/release.p12"
             echo "Signing with the private release key"
           else
-            echo "No release key secret yet: signing with the old key"
+            echo "::error::Missing ZZ_KEYSTORE_B64 secret"; exit 1
           fi
           gradle --no-daemon assembleRelease
           mkdir -p dist

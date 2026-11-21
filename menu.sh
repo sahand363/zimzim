@@ -152,6 +152,61 @@ change_port(){
   restart
 }
 
+video_relay(){
+  if [ "$(info turn)" = "true" ]; then
+    ok "Video relay is on (port $(info turn_port))"
+    systemctl is-active --quiet coturn && ok "coturn running" || err "coturn is not running: journalctl -u coturn -n 30"
+    ask "Remove it? (y/N)"
+    if [ "$REPLY" = "y" ]; then zz clear-turn >/dev/null; systemctl disable --now coturn >/dev/null 2>&1; ok "Removed"; restart; fi
+    return
+  fi
+  echo "  Video calls go phone to phone. When a network blocks that (common on mobile data),"
+  echo "  this relay passes the video through your server instead."
+  ask "Relay port [3478]"; local port=${REPLY:-3478}
+  [[ "$port" =~ ^[0-9]+$ ]] || { err "Not a number"; return; }
+  if port_busy "$port" && ! ss -ltnpH "( sport = :$port )" 2>/dev/null | grep -q turnserver; then err "Port $port is busy"; return; fi
+  if ! command -v turnserver >/dev/null; then
+    echo "  Installing coturn…"
+    command -v apt-get >/dev/null || { err "Only apt-based systems (Ubuntu/Debian) are supported"; return; }
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq coturn >/tmp/zimzim-coturn.log 2>&1 || { err "Install failed (/tmp/zimzim-coturn.log)"; return; }
+  fi
+  local secret ip
+  secret=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+  ip=$(public_ip)
+  cat > /etc/turnserver.conf <<CONF
+# Written by ZimZim
+listening-port=$port
+fingerprint
+use-auth-secret
+static-auth-secret=$secret
+realm=zimzim
+min-port=49160
+max-port=49260
+no-cli
+no-tls
+no-dtls
+no-multicast-peers
+no-loopback-peers
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+external-ip=$ip
+CONF
+  [ -f /etc/default/coturn ] && sed -i 's/^#\?TURNSERVER_ENABLED=.*/TURNSERVER_ENABLED=1/' /etc/default/coturn
+  systemctl enable coturn >/dev/null 2>&1
+  systemctl restart coturn
+  sleep 1
+  systemctl is-active --quiet coturn || { err "coturn failed to start: journalctl -u coturn -n 30"; return; }
+  if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+    ufw allow "$port" >/dev/null; ufw allow 49160:49260/udp >/dev/null; ok "Firewall opened ($port, 49160-49260/udp)"
+  fi
+  zz set-turn "$secret" "$port" "$ip" >/dev/null && ok "Video relay ready on $ip:$port"
+  echo "  If your provider has its own firewall, open $port (TCP+UDP) and 49160-49260 UDP there too."
+  restart
+}
+
 update(){
   echo "  Updating…"
   bash <(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/install.sh") </dev/tty
@@ -180,6 +235,7 @@ while true; do
   ${OR}8${C0}  Live logs ${DIM}(Ctrl+C to stop)${C0}
   ${OR}9${C0}  Update ZimZim
   ${OR}10${C0} Uninstall
+  ${OR}11${C0} Video relay (for hidden video calls)
   ${OR}0${C0}  Exit
 
 EOF
@@ -196,6 +252,7 @@ EOF
     8) journalctl -u zimzim -f -n 50 ;;
     9) update ;;
     10) uninstall; pause ;;
+    11) video_relay; pause ;;
     0|q|"") clear; exit 0 ;;
   esac
 done

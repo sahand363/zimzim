@@ -89,8 +89,10 @@ class Bridge(private val app: Context) {
     @JavascriptInterface fun getKeepAlive() = Walkie.keepAlive(app)
     @JavascriptInterface fun setKeepAlive(on: Boolean) { prefs.edit().putBoolean("keep_alive", on).apply() }
 
-    // Someone paged me: loud notification even if the phone is in a pocket.
-    @JavascriptInterface fun page(from: String) = ui.post {
+    @JavascriptInterface fun page(from: String) = alert("📟 ${from.take(40)} is paging you", "Tap to open ZimZim")
+
+    // Loud notification even if the phone is in a pocket (pages, video requests).
+    @JavascriptInterface fun alert(title: String, text: String) = ui.post {
         val nm = app.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(PAGE_CH, "Pages", NotificationManager.IMPORTANCE_HIGH).apply {
             enableVibration(true)
@@ -100,8 +102,8 @@ class Bridge(private val app: Context) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
         val n = Notification.Builder(app, PAGE_CH)
             .setSmallIcon(R.drawable.ic_stat)
-            .setContentTitle("📟 ${from.take(40)} is paging you")
-            .setContentText("Tap to open ZimZim")
+            .setContentTitle(title.take(60))
+            .setContentText(text.take(80))
             .setCategory(Notification.CATEGORY_CALL)
             .setAutoCancel(true)
             .setContentIntent(open)

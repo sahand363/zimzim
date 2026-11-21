@@ -207,14 +207,18 @@ class MainActivity : Activity() {
             override fun onPermissionRequest(request: PermissionRequest) {
                 w.post {
                     if (Uri.parse(request.origin.toString()).host != host) { request.deny(); return@post }
-                    if (applicationContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-                    } else {
-                        val a = Walkie.activity
-                        if (a == null) { request.deny(); return@post }
-                        a.pendingPermission = request
-                        a.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+                    val res = request.resources.filter {
+                        it == PermissionRequest.RESOURCE_AUDIO_CAPTURE || it == PermissionRequest.RESOURCE_VIDEO_CAPTURE
                     }
+                    val need = res.map {
+                        if (it == PermissionRequest.RESOURCE_VIDEO_CAPTURE) Manifest.permission.CAMERA else Manifest.permission.RECORD_AUDIO
+                    }.filter { applicationContext.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+                    if (res.isEmpty()) { request.deny(); return@post }
+                    if (need.isEmpty()) { request.grant(res.toTypedArray()); return@post }
+                    val a = Walkie.activity
+                    if (a == null) { request.deny(); return@post }
+                    a.pendingPermission = request
+                    a.requestPermissions(need.toTypedArray(), REQ_MIC)
                 }
             }
         }
@@ -239,8 +243,12 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) {
         super.onRequestPermissionsResult(code, perms, results)
         val micOk = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        pendingPermission?.let {
-            if (micOk) it.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else it.deny()
+        pendingPermission?.let { req ->
+            val camOk = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            val ok = req.resources.filter {
+                (it == PermissionRequest.RESOURCE_AUDIO_CAPTURE && micOk) || (it == PermissionRequest.RESOURCE_VIDEO_CAPTURE && camOk)
+            }
+            if (ok.size == req.resources.size && ok.isNotEmpty()) req.grant(ok.toTypedArray()) else req.deny()
             pendingPermission = null
         }
     }

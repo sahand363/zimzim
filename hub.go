@@ -42,9 +42,12 @@ type Hub struct {
 	store   *Store
 	mu      sync.RWMutex
 	clients map[*client]bool
+	calls   *callState
 }
 
-func NewHub(s *Store) *Hub { return &Hub{store: s, clients: map[*client]bool{}} }
+func NewHub(s *Store) *Hub {
+	return &Hub{store: s, clients: map[*client]bool{}, calls: newCallState()}
+}
 
 // shared returns the codes that are ON on both walkies (case-insensitive).
 func sharedCodes(a, b *Walkie) []string {
@@ -177,6 +180,7 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 		if c.talking.Load() {
 			h.relayTalk(c, false)
 		}
+		h.endCall(c, "gone")
 		c.close()
 		h.broadcastState()
 	}()
@@ -246,6 +250,8 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			for _, p := range h.peersOf(walkieID) {
 				p.send(opText, b)
 			}
+		case "vreq", "vans", "vsig", "vend":
+			h.handleCall(c, name, m.T, data)
 		case "hello":
 			h.broadcastState()
 		}

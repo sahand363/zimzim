@@ -85,6 +85,27 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 @keyframes paged{50%{filter:invert(1)}}
 .setrow{display:flex;align-items:center;gap:10px;padding:14px 4px 4px;margin-top:12px;border-top:1px solid #22261f;font-size:14px}
 .setrow span{flex:1}
+/* hidden video */
+.vbox{position:fixed;z-index:60;left:50%;top:18px;transform:translateX(-50%) scale(.96);opacity:0;pointer-events:none;transition:.15s}
+.vbox.open{opacity:1;pointer-events:auto;transform:translateX(-50%) scale(1)}
+.vbox input{width:120px;padding:9px 11px;border-radius:11px;border:1px solid #2c3129;background:#0f110e;color:#fff;font-size:15px;outline:none;text-align:center}
+.vin{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;background:#000a;backdrop-filter:blur(4px)}
+.vin.open{display:flex}
+.vin .card{width:min(320px,86vw);background:#181b17;border:1px solid #262a24;border-radius:22px;padding:24px 20px;text-align:center}
+.vin h2{margin:0 0 4px;font-size:19px}.vin p{margin:0 0 18px;color:var(--muted);font-size:13px}
+.vin .row2{display:flex;gap:10px}.vin button{flex:1;padding:13px;border:0;border-radius:14px;font-size:16px;font-weight:600;color:#fff}
+.vin .no{background:#3a2420}.vin .yes{background:#2f8a4a}
+.vcall{position:fixed;inset:0;z-index:80;background:#000;display:none}
+.vcall.open{display:block}
+.vcall #rv{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.vcall #lv{position:absolute;top:16px;right:16px;width:28vw;max-width:150px;aspect-ratio:3/4;object-fit:cover;border-radius:14px;border:1px solid #ffffff30;background:#111;transform:scaleX(-1)}
+.vcall #lv.back{transform:none}
+.vcall .st{position:absolute;left:0;right:0;top:42%;text-align:center;color:#fff;font-size:17px;text-shadow:0 1px 6px #000}
+.vcall .bar{position:absolute;left:0;right:0;bottom:calc(26px + env(safe-area-inset-bottom));display:flex;justify-content:center;gap:16px}
+.vcall .bar button{width:58px;height:58px;border-radius:50%;border:0;background:#ffffff26;color:#fff;display:grid;place-items:center;backdrop-filter:blur(6px)}
+.vcall .bar button.off{background:#fff;color:#111}
+.vcall .bar .end{background:#e23b2f}
+.vcall .bar svg{width:24px;height:24px}
 
 .ptt{width:100%;height:92px;border:0;border-radius:46px;cursor:pointer;color:#fff;
   background:linear-gradient(180deg,#ef6a43,var(--orange) 45%,var(--orange2));
@@ -195,6 +216,19 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 </div>
 
 <div class="whispers" id="whispers"></div>
+<form class="vbox" id="vbox" autocomplete="off"><input id="vsec" type="password" inputmode="text" maxlength="64" autocomplete="off"></form>
+<div class="vin" id="vin"><div class="card"><h2 id="vinT"></h2><p>Video chat</p><div class="row2"><button class="no" id="vNo">Decline</button><button class="yes" id="vYes">Accept</button></div></div></div>
+<div class="vcall" id="vcall">
+  <video id="rv" autoplay playsinline></video>
+  <video id="lv" autoplay playsinline muted></video>
+  <div class="st" id="vst"></div>
+  <div class="bar">
+    <button id="vMic" aria-label="Mute"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button id="vCam" aria-label="Camera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
+    <button id="vFlip" aria-label="Flip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></svg></button>
+    <button id="vEnd" class="end" aria-label="End"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-3.3 0-6.3.9-8.9 2.6-.6.4-.8 1.2-.4 1.8l1.5 2.3c.4.6 1.2.8 1.8.4l2.2-1.4c.4-.3.6-.8.5-1.3l-.3-1.4c1.1-.3 2.3-.5 3.6-.5s2.5.2 3.6.5l-.3 1.4c-.1.5.1 1 .5 1.3l2.2 1.4c.6.4 1.4.2 1.8-.4l1.5-2.3c.4-.6.2-1.4-.4-1.8C18.3 9.9 15.3 9 12 9z"/></svg></button>
+  </div>
+</div>
 <div class="veil" id="veil"></div>
 <div class="sheet" id="sheet">
   <h3>Codes</h3>
@@ -318,6 +352,7 @@ function connect(){
       render();
     }
     else if (m.t==='page'){ paged(m.from); }
+    else if (m.t && m.t[0]==='v' && m.t.length>2 && onVideo(m)) {}
     else if (m.t==='msg'){ whisper(m.from, m.text, false); if (navigator.vibrate) navigator.vibrate([20,60,20]); }
   };
 }
@@ -353,7 +388,7 @@ async function ensureMic(){
   return true;
 }
 function play(buf){
-  if (!ctx || !powered) return;
+  if (!ctx || !powered || vc.active) return;
   const u8=new Uint8Array(buf); const nl=u8[0]; if (u8.length<1+nl+2) return;
   const name=new TextDecoder().decode(u8.subarray(1,1+nl));
   const pcm=u8.slice(1+nl); const i16=new Int16Array(pcm.buffer, 0, pcm.length>>1);
@@ -404,6 +439,7 @@ async function powerOn(){
   if (APP && APP.setEarpiece && ear) setTimeout(()=>APP.setEarpiece(true), 600);
 }
 function powerOff(){
+  if (vc.active || $('vin').classList.contains('open')) { send({t:vc.role==='' ? 'vans' : 'vend', ok:false}); hangup(false); }
   if (APP) APP.power(false);
   powered=false; live=false; ptt=false; txOn=false;
   if (ws){ ws.onclose=null; ws.close(); ws=null; }
@@ -490,6 +526,109 @@ if (APP && APP.setKeepAlive){
   const sw=$('keepSw'); sw.classList.toggle('on', APP.getKeepAlive());
   sw.onclick = () => { const v=!sw.classList.contains('on'); APP.setKeepAlive(v); sw.classList.toggle('on', v); };
 }
+
+// ---------- hidden video chat ----------
+const vc = {active:false, pc:null, local:null, role:'', pending:[], facing:'user', ice:null, ringT:null};
+let taps=[];
+document.querySelector('.antenna').addEventListener('pointerdown', () => {
+  const now=Date.now(); taps=taps.filter(t=>now-t<2000); taps.push(now);
+  if (taps.length>=4){ taps=[]; if (!powered || vc.active) return; $('vbox').classList.add('open'); $('vsec').value=''; setTimeout(()=>$('vsec').focus(),50); }
+});
+$('vsec').addEventListener('blur', ()=>setTimeout(()=>$('vbox').classList.remove('open'),150));
+$('vbox').onsubmit = e => { e.preventDefault(); const v=$('vsec').value; $('vsec').value=''; $('vbox').classList.remove('open'); $('vsec').blur();
+  if (v && ws && ws.readyState===1) send({t:'vreq', secret:v}); };
+
+async function iceList(){
+  if (vc.ice) return vc.ice;
+  try { const j=await (await fetch(base+'api/ice')).json(); vc.ice=(j.iceServers||[]); } catch { vc.ice=[]; }
+  vc.ice = vc.ice.concat([{urls:'stun:stun.l.google.com:19302'}]);
+  return vc.ice;
+}
+async function getCam(){
+  if (vc.local) return vc.local;
+  vc.local = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}, video:{facingMode:vc.facing, width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:24}}});
+  $('lv').srcObject = vc.local; $('lv').classList.toggle('back', vc.facing!=='user');
+  return vc.local;
+}
+function showCall(text){ vc.active=true; live=false; ptt=false; setTx(); $('vcall').classList.add('open'); $('vst').textContent=text||''; }
+async function makePC(){
+  const pc = new RTCPeerConnection({iceServers: await iceList()});
+  vc.pc = pc;
+  vc.local.getTracks().forEach(t=>pc.addTrack(t, vc.local));
+  pc.onicecandidate = e => { if (e.candidate) send({t:'vsig', data:{cand:e.candidate}}); };
+  pc.ontrack = e => { $('rv').srcObject = e.streams[0]; $('vst').textContent=''; };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState==='connected') $('vst').textContent='';
+    if (pc.connectionState==='failed'){ $('vst').textContent='Could not connect'; setTimeout(()=>hangup(true), 2500); }
+  };
+  return pc;
+}
+async function onSig(d){
+  const pc=vc.pc; if (!pc) { vc.pending.push(d); return; }
+  if (d.sdp){
+    await pc.setRemoteDescription(d.sdp);
+    if (d.sdp.type==='offer'){ const a=await pc.createAnswer(); await pc.setLocalDescription(a); send({t:'vsig', data:{sdp:pc.localDescription}}); }
+    for (const c of vc.pending.splice(0)) { try { await pc.addIceCandidate(c); } catch {} }
+  } else if (d.cand){
+    if (pc.remoteDescription) { try { await pc.addIceCandidate(d.cand); } catch {} } else vc.pending.push(d.cand);
+  }
+}
+function stopRing(){ clearInterval(vc.ringT); vc.ringT=null; $('vin').classList.remove('open'); }
+function hangup(tell){
+  if (tell) send({t:'vend'});
+  stopRing();
+  if (vc.pc){ vc.pc.close(); vc.pc=null; }
+  if (vc.local){ vc.local.getTracks().forEach(t=>t.stop()); vc.local=null; }
+  $('rv').srcObject=null; $('lv').srcObject=null; vc.pending=[]; vc.role=''; vc.active=false;
+  $('vcall').classList.remove('open'); $('vMic').classList.remove('off'); $('vCam').classList.remove('off');
+  render();
+}
+function onVideo(m){
+  switch(m.t){
+    case 'vringing': vc.role='caller'; showCall('Calling '+m.to+'…'); getCam().catch(()=>{ toast('Camera blocked'); hangup(true); }); return true;
+    case 'vfail': {
+      const w={busy:'Busy right now', count: m.n ? 'Only works with one person on your channel' : 'Nobody on your channel', wait:'Too many tries. Wait a bit.'}[m.why];
+      if (w) toast(w); return true; }
+    case 'vreq':
+      if (vc.active){ send({t:'vans', ok:false}); return true; }
+      $('vinT').textContent=m.from; $('vin').classList.add('open');
+      ring(); vc.ringT=setInterval(ring, 2200);
+      if (navigator.vibrate) navigator.vibrate([500,300,500,300,500]);
+      if (APP && APP.alert) APP.alert('📹 '+m.from, 'Video chat');
+      return true;
+    case 'vaccept':
+      (async()=>{ try { await getCam(); const pc=await makePC(); $('vst').textContent='Connecting…';
+        const o=await pc.createOffer(); await pc.setLocalDescription(o); send({t:'vsig', data:{sdp:pc.localDescription}}); } catch(e){ hangup(true); } })();
+      return true;
+    case 'vsig': onSig(m.data||{}); return true;
+    case 'vend': {
+      const w={declined:'Declined', noanswer:'No answer', hangup:'Call ended', gone:'Call ended', cancelled:'', elsewhere:''}[m.why];
+      if (vc.active || $('vin').classList.contains('open')){ hangup(false); if (w) toast(w); }
+      return true; }
+  }
+  return false;
+}
+$('vYes').onclick = async () => {
+  stopRing(); vc.role='callee'; showCall('Connecting…');
+  try { await getCam(); } catch { toast('Camera blocked'); send({t:'vans', ok:false}); hangup(false); return; }
+  await makePC(); send({t:'vans', ok:true});
+  for (const d of vc.pending.splice(0)) await onSig(d);
+};
+$('vNo').onclick = () => { stopRing(); send({t:'vans', ok:false}); };
+$('vEnd').onclick = () => hangup(true);
+$('vMic').onclick = () => { if(!vc.local) return; const t=vc.local.getAudioTracks()[0]; if(t){ t.enabled=!t.enabled; $('vMic').classList.toggle('off', !t.enabled); } };
+$('vCam').onclick = () => { if(!vc.local) return; const t=vc.local.getVideoTracks()[0]; if(t){ t.enabled=!t.enabled; $('vCam').classList.toggle('off', !t.enabled); } };
+$('vFlip').onclick = async () => {
+  if (!vc.local) return;
+  vc.facing = vc.facing==='user' ? 'environment' : 'user';
+  try {
+    const ns = await navigator.mediaDevices.getUserMedia({video:{facingMode:vc.facing, width:{ideal:640}, height:{ideal:480}}});
+    const nt = ns.getVideoTracks()[0], old = vc.local.getVideoTracks()[0];
+    if (vc.pc){ const snd=vc.pc.getSenders().find(x=>x.track && x.track.kind==='video'); if (snd) await snd.replaceTrack(nt); }
+    if (old){ vc.local.removeTrack(old); old.stop(); }
+    vc.local.addTrack(nt); $('lv').srcObject=vc.local; $('lv').classList.toggle('back', vc.facing!=='user');
+  } catch { toast('Could not switch camera'); }
+};
 
 // ---------- install prompt ----------
 let deferred=null;

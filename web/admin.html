@@ -72,6 +72,12 @@ label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px}
   </form>
 
   <div id="list"></div>
+
+  <form class="card" id="setForm">
+    <div class="row"><strong>Hidden video</strong><span class="sub" id="turnSt"></span></div>
+    <p class="sub" style="margin:6px 0 10px">Tap the antenna 4 times, type this secret, and the one other person on your channel gets a video request.</p>
+    <div style="display:flex;gap:8px"><input id="vSecret" autocomplete="off" autocapitalize="off" style="flex:1"><button class="primary">Save</button></div>
+  </form>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -151,6 +157,9 @@ function render(){
     L.append(c);
   });
 }
+async function loadSettings(){ try{ const j=await api('settings'); $('vSecret').value=j.videoSecret; $('turnSt').textContent=j.turn?'relay on':'relay off · zimzim menu → 11'; }catch(e){} }
+$('setForm').onsubmit=async e=>{e.preventDefault();try{await api('settings','PUT',{videoSecret:$('vSecret').value});toast('Secret saved');}catch(err){toast(err.message);}};
+const _show=show; show=function(a){_show(a); if(a) loadSettings();};
 fetch(base+'api/walkies').then(r=>{if(r.ok)return r.json().then(j=>{data=j;show(true);render();});show(false);$('lu').focus();});
 })();
 </script>

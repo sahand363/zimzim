@@ -32,14 +32,18 @@ type Walkie struct {
 }
 
 type Config struct {
-	Port      int       `json:"port"`
-	Domain    string    `json:"domain"`
-	Cert      string    `json:"cert"`
-	Key       string    `json:"key"`
-	AdminPath string    `json:"admin_path"`
-	AdminUser string    `json:"admin_user"`
-	AdminHash string    `json:"admin_hash"`
-	Walkies   []*Walkie `json:"walkies"`
+	Port        int       `json:"port"`
+	Domain      string    `json:"domain"`
+	Cert        string    `json:"cert"`
+	Key         string    `json:"key"`
+	AdminPath   string    `json:"admin_path"`
+	AdminUser   string    `json:"admin_user"`
+	AdminHash   string    `json:"admin_hash"`
+	VideoSecret string    `json:"video_secret"`
+	TurnSecret  string    `json:"turn_secret"`
+	TurnPort    int       `json:"turn_port"`
+	TurnHost    string    `json:"turn_host"`
+	Walkies     []*Walkie `json:"walkies"`
 }
 
 type Store struct {
