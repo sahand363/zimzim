@@ -30,7 +30,7 @@ object Walkie {
     fun shutdown(c: Context) {
         powered = false
         c.applicationContext.stopService(Intent(c.applicationContext, TalkService::class.java))
-        setEarpiece(c, false)
+        if (earOn) setEarpiece(c, false)
         web?.let { w ->
             (w.parent as? android.view.ViewGroup)?.removeView(w)
             w.destroy()
@@ -56,12 +56,16 @@ object Walkie {
                     @Suppress("DEPRECATION")
                     am.isSpeakerphoneOn = false
                 }
-            } else if (earOn) {
-                // Only undo what we changed; never touch audio routing otherwise.
+            } else {
+                // Always force the loudspeaker back. The mic itself keeps Android in "call" mode,
+                // so just clearing the route left the sound stuck in the earpiece.
                 earOn = false
-                if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice()
-                else speakerOn(am)
-                am.mode = prevMode
+                if (Build.VERSION.SDK_INT >= 31) {
+                    val spk = am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                    if (spk != null) am.setCommunicationDevice(spk) else am.clearCommunicationDevice()
+                }
+                speakerOn(am)
+                if (prevMode != AudioManager.MODE_IN_COMMUNICATION) am.mode = prevMode
             }
         } catch (_: Exception) {}
     }

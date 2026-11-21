@@ -11,8 +11,8 @@ android {
         applicationId = "com.sahand.zimzim"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.2.1"
     }
 
     // Release key comes only from GitHub secrets (ZZ_KEYSTORE_B64 / ZZ_KEYSTORE_PASS); it never lives in the repo.
