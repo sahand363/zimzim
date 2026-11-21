@@ -47,6 +47,18 @@ class MainActivity : Activity() {
         if (intent?.getBooleanExtra(EXTRA_QUIT, false) == true) { quit(); return }
         val link = prefs.getString(KEY_URL, null)
         Walkie.activity = this
+        Crash.install(applicationContext)
+        Crash.take(this)?.let { report ->
+            AlertDialog.Builder(this)
+                .setTitle("ZimZim closed unexpectedly last time")
+                .setMessage("Copy the report and send it to the developer.\n\n" + report.take(600))
+                .setPositiveButton("Copy") { _, _ ->
+                    getSystemService(android.content.ClipboardManager::class.java)
+                        .setPrimaryClip(android.content.ClipData.newPlainText("ZimZim crash", report))
+                }
+                .setNegativeButton("Close", null)
+                .show()
+        }
         if (link.isNullOrBlank()) showSetup(null)
         else if (Walkie.web != null && Walkie.link == link) attach(Walkie.web!!)
         else openWalkie(link)
@@ -147,7 +159,7 @@ class MainActivity : Activity() {
 
     // ---------- walkie ----------
     @SuppressLint("SetJavaScriptEnabled")
-    private fun openWalkie(link: String) {
+    fun openWalkie(link: String) {
         askPermissions()
         val host = Uri.parse(link).host
         Walkie.shutdown(this)
@@ -171,6 +183,19 @@ class MainActivity : Activity() {
             }
             override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
                 return req.url.host != host
+            }
+            // The page's engine crashed or was killed: rebuild it instead of letting Android close the app.
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                Crash.note(applicationContext, "render process gone, crashed=${detail.didCrash()}")
+                if (Walkie.web === view) {
+                    (view.parent as? ViewGroup)?.removeView(view)
+                    view.destroy()
+                    Walkie.web = null
+                    Walkie.powered = false
+                    applicationContext.stopService(Intent(applicationContext, TalkService::class.java))
+                    Walkie.activity?.let { a -> prefs.getString(KEY_URL, null)?.let { a.openWalkie(it) } }
+                }
+                return true
             }
             override fun onReceivedError(view: WebView, req: WebResourceRequest, error: android.webkit.WebResourceError) {
                 if (req.isForMainFrame) {

@@ -37,9 +37,16 @@ class TalkService : Service() {
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "Turn off", quit).build())
             .build()
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else startForeground(ID, n)
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else startForeground(ID, n)
+        } catch (e: Exception) {
+            // Android refused the background mic (rare); keep the app running without it.
+            Crash.note(this, "startForeground: $e")
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         if (wake == null) {
             wake = getSystemService(PowerManager::class.java)

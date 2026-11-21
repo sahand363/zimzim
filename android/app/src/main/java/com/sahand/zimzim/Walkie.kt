@@ -22,6 +22,8 @@ object Walkie {
     var link: String? = null
     var activity: MainActivity? = null
     @Volatile var powered = false
+    private var earOn = false
+    private var prevMode = AudioManager.MODE_NORMAL
 
     fun keepAlive(c: Context) = c.getSharedPreferences("zimzim", Context.MODE_PRIVATE).getBoolean("keep_alive", true)
 
@@ -37,10 +39,15 @@ object Walkie {
         link = null
     }
 
+    @Suppress("DEPRECATION")
+    private fun speakerOn(am: AudioManager) { am.isSpeakerphoneOn = true }
+
     fun setEarpiece(c: Context, on: Boolean) {
         val am = c.applicationContext.getSystemService(AudioManager::class.java) ?: return
         try {
             if (on) {
+                if (!earOn) prevMode = am.mode
+                earOn = true
                 am.mode = AudioManager.MODE_IN_COMMUNICATION
                 if (Build.VERSION.SDK_INT >= 31) {
                     am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
@@ -49,15 +56,12 @@ object Walkie {
                     @Suppress("DEPRECATION")
                     am.isSpeakerphoneOn = false
                 }
-            } else {
-                if (Build.VERSION.SDK_INT >= 31) {
-                    val spk = am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                    if (am.mode == AudioManager.MODE_IN_COMMUNICATION && spk != null) am.setCommunicationDevice(spk)
-                    else am.clearCommunicationDevice()
-                } else {
-                    @Suppress("DEPRECATION")
-                    am.isSpeakerphoneOn = true
-                }
+            } else if (earOn) {
+                // Only undo what we changed; never touch audio routing otherwise.
+                earOn = false
+                if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice()
+                else speakerOn(am)
+                am.mode = prevMode
             }
         } catch (_: Exception) {}
     }

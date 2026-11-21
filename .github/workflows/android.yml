@@ -30,10 +30,20 @@ jobs:
           echo "name=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
           echo "code=$(grep -oP 'versionCode = \K[0-9]+' app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
       - name: Build APK
+        env:
+          ZZ_KEYSTORE_B64: ${{ secrets.ZZ_KEYSTORE_B64 }}
+          ZZ_KEYSTORE_PASS: ${{ secrets.ZZ_KEYSTORE_PASS }}
         run: |
-          gradle --no-daemon assembleDebug
+          if [ -n "$ZZ_KEYSTORE_B64" ]; then
+            echo "$ZZ_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
+            export ZZ_KEYSTORE="$RUNNER_TEMP/release.p12"
+            echo "Signing with the private release key"
+          else
+            echo "No release key secret yet: signing with the old key"
+          fi
+          gradle --no-daemon assembleRelease
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/ZimZim-${{ steps.ver.outputs.name }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/ZimZim-${{ steps.ver.outputs.name }}.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: ZimZim-${{ steps.ver.outputs.name }}

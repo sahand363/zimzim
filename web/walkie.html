@@ -334,7 +334,7 @@ async function ensureMic(){
     mic = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});
   } catch(e){ toast('Mic blocked. Allow it in the browser settings.'); return false; }
   const src = ctx.createMediaStreamSource(mic);
-  proc = ctx.createScriptProcessor(1024,1,1);
+  proc = ctx.createScriptProcessor(2048,1,1);
   const mute = ctx.createGain(); mute.gain.value=0;
   src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
   proc.onaudioprocess = e => {
@@ -359,11 +359,15 @@ function play(buf){
   const pcm=u8.slice(1+nl); const i16=new Int16Array(pcm.buffer, 0, pcm.length>>1);
   const ab=ctx.createBuffer(1,i16.length,RATE), ch=ab.getChannelData(0);
   let peak=0; for (let i=0;i<i16.length;i++){ ch[i]=i16[i]/32768; const a=Math.abs(ch[i]); if(a>peak) peak=a; }
-  const st = rx[name] || (rx[name]={next:0});
+  const st = rx[name] || (rx[name]={next:0, target:0.12, calm:0});
   const now=ctx.currentTime;
-  // Small jitter buffer: start ~70 ms ahead, and drop audio once more than 250 ms is queued so lag can't build up.
-  if (st.next < now+0.02) st.next = now+0.07;
-  else if (st.next > now+0.25) { markTalker(name, peak); return; }
+  // Adaptive jitter buffer: starts ~120 ms ahead, grows a little after each gap (bad network),
+  // shrinks back after 8 s of smooth audio, and only drops audio if far too much piles up.
+  if (st.next < now+0.005){
+    if (st.next>0 && now-st.next < 1) { st.target=Math.min(0.4, st.target+0.04); st.calm=now; }
+    st.next = now+st.target;
+  } else if (st.next > now+st.target+0.45) { markTalker(name, peak); return; }
+  if (now-st.calm > 8 && st.target > 0.1){ st.target=Math.max(0.1, st.target-0.02); st.calm=now; }
   const s=ctx.createBufferSource(); s.buffer=ab; s.connect(ctx.destination); s.start(st.next); st.next+=ab.duration;
   markTalker(name, peak);
 }
@@ -397,7 +401,7 @@ async function powerOn(){
   if (window.isSecureContext) ensureMic();
   try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
   if (APP) APP.power(true);
-  if (APP && APP.setEarpiece) setTimeout(()=>APP.setEarpiece(ear), 600);
+  if (APP && APP.setEarpiece && ear) setTimeout(()=>APP.setEarpiece(true), 600);
 }
 function powerOff(){
   if (APP) APP.power(false);
@@ -479,7 +483,7 @@ function applyEar(){ $('earBtn').classList.toggle('lit', ear); if (APP && APP.se
 if (APP && APP.setEarpiece){
   $('earBtn').classList.remove('hidden');
   $('earBtn').onclick = () => { ear=!ear; localStorage.setItem('zz_ear', ear?'1':'0'); applyEar(); toast(ear?'Earpiece: hold the phone to your ear':'Speaker'); };
-  applyEar();
+  $('earBtn').classList.toggle('lit', ear);
 }
 if (APP && APP.setKeepAlive){
   $('keepRow').classList.remove('hidden');
