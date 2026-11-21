@@ -437,6 +437,12 @@ func (a *App) walkie(w http.ResponseWriter, r *http.Request, wk *Walkie, slug, s
 		ice := iceServers(a.store.cfg, host, wk.ID)
 		a.store.mu.RUnlock()
 		writeJSON(w, 200, map[string]any{"iceServers": ice})
+	case "api/vm":
+		if !authed() {
+			writeJSON(w, 401, map[string]string{"error": "login"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"list": a.hub.vm.list(wk.ID)})
 	case "ws":
 		if !authed() {
 			http.Error(w, "login", 401)
@@ -448,6 +454,19 @@ func (a *App) walkie(w http.ResponseWriter, r *http.Request, wk *Walkie, slug, s
 		}
 		a.hub.Serve(ws, wk.ID)
 	default:
+		if id, ok := strings.CutPrefix(sub, "api/vm/"); ok && authed() {
+			if r.Method == http.MethodDelete {
+				a.hub.vm.remove(wk.ID, id)
+				writeJSON(w, 200, map[string]string{"ok": "1"})
+				return
+			}
+			if b, ok := a.hub.vm.open(wk.ID, id); ok {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Header().Set("Cache-Control", "no-store")
+				w.Write(b)
+				return
+			}
+		}
 		http.NotFound(w, r)
 	}
 }
@@ -628,6 +647,7 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, base, sub string) {
 			}
 			a.store.cfg.Walkies = ws
 			kick = true
+			a.hub.vm.removeAll(id)
 		default:
 			a.store.mu.Unlock()
 			http.Error(w, "method", 405)

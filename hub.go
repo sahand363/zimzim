@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ type client struct {
 	ws       *wsConn
 	out      chan outMsg
 	talking  atomic.Bool
+	opus     atomic.Bool
 	lastPage time.Time
 	once     sync.Once
 	done     chan struct{}
@@ -43,6 +45,7 @@ type Hub struct {
 	mu      sync.RWMutex
 	clients map[*client]bool
 	calls   *callState
+	vm      *vmail
 	vmu     sync.Mutex
 	voice   map[string]voiceOwner // walkie -> the one connection whose audio we pass on
 }
@@ -67,7 +70,8 @@ func (h *Hub) voiceFrom(c *client) bool {
 }
 
 func NewHub(s *Store) *Hub {
-	return &Hub{store: s, clients: map[*client]bool{}, calls: newCallState(), voice: map[string]voiceOwner{}}
+	return &Hub{store: s, clients: map[*client]bool{}, calls: newCallState(), voice: map[string]voiceOwner{},
+		vm: newVmail(filepath.Join(filepath.Dir(s.path), "vm"))}
 }
 
 // shared returns the codes that are ON on both walkies (case-insensitive).
@@ -122,6 +126,7 @@ type peerInfo struct {
 	Name    string   `json:"name"`
 	Codes   []string `json:"codes"`
 	Talking bool     `json:"talking"`
+	Opus    bool     `json:"opus"`
 }
 
 // broadcastState sends each client its own codes and the peers it can reach.
@@ -151,9 +156,10 @@ func (h *Hub) broadcastState() {
 			}
 			p := seen[ow.ID]
 			if p == nil {
-				p = &peerInfo{Name: ow.Name, Codes: sc}
+				p = &peerInfo{Name: ow.Name, Codes: sc, Opus: true}
 				seen[ow.ID] = p
 			}
+			p.Opus = p.Opus && o.opus.Load()
 			p.Talking = p.Talking || o.talking.Load()
 		}
 		peers := []peerInfo{}
@@ -202,6 +208,7 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			h.relayTalk(c, false)
 		}
 		h.endCall(c, "gone")
+		h.vmFlush(c)
 		c.close()
 		h.broadcastState()
 	}()
@@ -227,6 +234,7 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			for _, p := range h.peersOf(walkieID) {
 				p.send(opBinary, frame)
 			}
+			h.vmFeed(c, data)
 			continue
 		}
 		var m struct {
@@ -234,6 +242,7 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			On    bool   `json:"on"`
 			Text  string `json:"text"`
 			Codes []Code `json:"codes"`
+			Opus  bool   `json:"opus"`
 		}
 		if json.Unmarshal(data, &m) != nil {
 			continue
@@ -242,6 +251,9 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 		case "talk":
 			c.talking.Store(m.On)
 			h.relayTalk(c, m.On)
+			if !m.On {
+				h.vmFlush(c)
+			}
 		case "msg":
 			t := strings.TrimSpace(m.Text)
 			if t == "" {
@@ -274,7 +286,9 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 		case "vreq", "vans", "vsig", "vend":
 			h.handleCall(c, name, m.T, data)
 		case "hello":
+			c.opus.Store(m.Opus)
 			h.broadcastState()
+			sendJSON(c, map[string]any{"t": "vmlist", "list": h.vm.list(walkieID)})
 		}
 	}
 }

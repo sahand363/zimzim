@@ -77,6 +77,9 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 @media (max-width:380px){.controls .iconbtn{width:36px;height:36px}.controls .iconbtn svg{width:18px;height:18px}.switch{gap:6px;letter-spacing:1px}}
 .iconbtn:active{transform:translateY(2px);box-shadow:0 1px 0 #0b0d0a}
 .iconbtn svg{width:20px;height:20px}
+.vmbtn{position:relative;color:var(--green)}
+.vmbtn b{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ff5b36;color:#fff;font:700 10px/17px system-ui;text-align:center}
+.vmbtn.playing{animation:vmp 1s infinite}@keyframes vmp{50%{opacity:.45}}
 .chbtn{font:700 12px/1 ui-monospace,monospace;letter-spacing:1px}
 .iconbtn.lit{color:var(--orange);box-shadow:0 3px 0 #0b0d0a,inset 0 0 0 1px #e2552f66}
 .iconbtn.ring{animation:ring .5s ease-in-out 4}
@@ -199,6 +202,7 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
       <div class="switch" id="live"><div class="track"></div>LIVE</div>
       <div style="display:flex;gap:8px">
         <button class="iconbtn hidden" id="earBtn" aria-label="Earpiece"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg></button>
+        <button class="iconbtn vmbtn hidden" id="vmBtn" aria-label="Voice messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg><b id="vmN">1</b></button>
         <button class="iconbtn" id="pageBtn" aria-label="Page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
         <button class="iconbtn chbtn" id="chBtn" aria-label="Codes">CH</button>
         <div class="ctrlwrap">
@@ -340,7 +344,7 @@ function connect(){
   clearTimeout(wsTimer);
   const url=(location.protocol==='https:'?'wss://':'ws://')+location.host+base+'ws';
   ws = new WebSocket(url); ws.binaryType='arraybuffer';
-  ws.onopen = () => { retry=0; send({t:'hello'}); if (txOn) send({t:'talk',on:true}); render(); };
+  ws.onopen = () => { retry=0; send({t:'hello', opus:canOpus}); if (txOn) send({t:'talk',on:true}); render(); };
   ws.onclose = () => { talkers.clear(); render(); if (powered){ wsTimer=setTimeout(connect, Math.min(8000, 500*2**retry++)); } };
   ws.onmessage = ev => {
     if (typeof ev.data !== 'string'){ play(ev.data); return; }
@@ -352,6 +356,8 @@ function connect(){
       render();
     }
     else if (m.t==='page'){ paged(m.from); }
+    else if (m.t==='vmlist'){ vmList=m.list||[]; vmRender(); if (vmList.length){ toast('✉ '+vmList.length+' voice message'+(vmList.length>1?'s':'')); if (navigator.vibrate) navigator.vibrate([30,80,30]); } }
+    else if (m.t==='vmsaved'){ toast('Saved as a voice message for '+m.to.join(', ')); }
     else if (m.t && m.t[0]==='v' && m.t.length>2 && onVideo(m)) {}
     else if (m.t==='msg'){ whisper(m.from, m.text, false); if (navigator.vibrate) navigator.vibrate([20,60,20]); }
   };
@@ -359,7 +365,7 @@ function connect(){
 
 // ---------- audio ----------
 async function ensureAudio(){
-  if (!ctx){ ctx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'}); }
+  if (!ctx){ try { ctx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive', sampleRate:48000}); } catch { ctx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'}); } }
   if (ctx.state==='suspended') await ctx.resume();
 }
 async function ensureMic(){
@@ -374,26 +380,81 @@ async function ensureMic(){
   src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
   proc.onaudioprocess = e => {
     if (!txOn || !ws || ws.readyState!==1) { $('meter').style.width='0'; return; }
-    const inp=e.inputBuffer.getChannelData(0), ratio=ctx.sampleRate/RATE, n=Math.floor(inp.length/ratio);
-    const out=new Int16Array(n); let peak=0;
+    const inp=e.inputBuffer.getChannelData(0);
+    let peak=0; for (let i=0;i<inp.length;i++){ const v=Math.abs(inp[i]); if (v>peak) peak=v; }
+    $('meter').style.width=Math.min(100,peak*160)+'%';
+    const t=performance.now(); if (peak>0.02) lastVoice=t;
+    const vflag = (t-lastVoice < 350) ? 0x80 : 0;   // voice + a short tail, so words aren't clipped
+    if (ws.bufferedAmount > 128000) return;
+    const useOpus = canOpus && peers.every(p=>p.opus);
+    if (useOpus && sendOpus(inp, ctx.sampleRate, vflag)) return;
+    const ratio=ctx.sampleRate/RATE, n=Math.floor(inp.length/ratio);
+    const out=new Uint8Array(1+n*2), dv=new DataView(out.buffer); out[0]=0|vflag;
     for (let i=0;i<n;i++){
       const a=Math.floor(i*ratio), b=Math.min(inp.length, Math.floor((i+1)*ratio));
-      let s=0; for (let j=a;j<b;j++) s+=inp[j]; s/= (b-a)||1;
-      s=Math.max(-1,Math.min(1,s)); if (Math.abs(s)>peak) peak=Math.abs(s);
-      out[i]= s<0 ? s*0x8000 : s*0x7fff;
+      let x=0; for (let j=a;j<b;j++) x+=inp[j]; x/= (b-a)||1;
+      x=Math.max(-1,Math.min(1,x)); dv.setInt16(1+i*2, x<0 ? x*0x8000 : x*0x7fff, true);
     }
-    $('meter').style.width=Math.min(100,peak*160)+'%';
-    if (ws.bufferedAmount < 128000) ws.send(out.buffer); // keep every chunk: dropping is what made the voice choppy
+    ws.send(out.buffer);
   };
   return true;
 }
+// ---------- Opus (about a tenth of the data of raw audio) ----------
+let canOpus=false, enc=null, encTs=0, encFlag=0, lastVoice=0;
+const OPUS_ENC={codec:'opus', sampleRate:48000, numberOfChannels:1, bitrate:24000, opus:{frameDuration:20000}};
+const OPUS_DEC={codec:'opus', sampleRate:48000, numberOfChannels:1};
+async function checkOpus(){
+  if (canOpus || !window.AudioEncoder || !window.AudioDecoder || !window.AudioData) return;
+  try {
+    const a=await AudioEncoder.isConfigSupported(OPUS_ENC), b=await AudioDecoder.isConfigSupported(OPUS_DEC);
+    canOpus = !!(a.supported && b.supported);
+  } catch { canOpus=false; }
+}
+function opusOff(){ canOpus=false; try{enc&&enc.close()}catch{} enc=null; send({t:'hello', opus:false}); }
+function sendOpus(inp, rate, vflag){
+  try {
+    if (!enc || enc.state==='closed'){
+      enc=new AudioEncoder({output: ch => {
+        if (!ws || ws.readyState!==1) return;
+        const b=new Uint8Array(1+ch.byteLength); b[0]=1|encFlag; ch.copyTo(b.subarray(1)); ws.send(b.buffer);
+      }, error: opusOff});
+      enc.configure(OPUS_ENC); encTs=0;
+    }
+    let data=inp;
+    if (rate!==48000){ const n=Math.round(inp.length*48000/rate); data=new Float32Array(n);
+      for (let i=0;i<n;i++){ const x=i*rate/48000, j=Math.floor(x), f=x-j; data[i]=inp[j]*(1-f)+(inp[Math.min(j+1,inp.length-1)]*f); } }
+    else data=new Float32Array(inp);
+    encFlag=vflag;
+    enc.encode(new AudioData({format:'f32', sampleRate:48000, numberOfFrames:data.length, numberOfChannels:1, timestamp:encTs, data}));
+    encTs += Math.round(data.length*1e6/48000);
+    return true;
+  } catch { opusOff(); return false; }
+}
+function pcmToFloat(u8){ const n=u8.length>>1, f=new Float32Array(n), dv=new DataView(u8.buffer,u8.byteOffset,n*2);
+  for (let i=0;i<n;i++) f[i]=dv.getInt16(i*2,true)/32768; return f; }
+function audioDataToFloat(ad){ const f=new Float32Array(ad.numberOfFrames); ad.copyTo(f,{planeIndex:0, format:'f32-planar'}); ad.close(); return f; }
+
 function play(buf){
   if (!ctx || !powered || vc.active) return;
-  const u8=new Uint8Array(buf); const nl=u8[0]; if (u8.length<1+nl+2) return;
+  const u8=new Uint8Array(buf); const nl=u8[0]; if (u8.length<2+nl) return;
   const name=new TextDecoder().decode(u8.subarray(1,1+nl));
-  const pcm=u8.slice(1+nl); const i16=new Int16Array(pcm.buffer, 0, pcm.length>>1);
-  const ab=ctx.createBuffer(1,i16.length,RATE), ch=ab.getChannelData(0);
-  let peak=0; for (let i=0;i<i16.length;i++){ ch[i]=i16[i]/32768; const a=Math.abs(ch[i]); if(a>peak) peak=a; }
+  const kind=u8[1+nl]&0x7f, data=u8.subarray(2+nl);
+  if (kind===0){ schedule(name, pcmToFloat(data.slice()), RATE); return; }
+  if (kind!==1) return;
+  const st = rx[name] || (rx[name]={next:0, target:0.15, calm:0});
+  try {
+    if (!st.dec || st.dec.state==='closed'){
+      st.dec=new AudioDecoder({output: ad => schedule(name, audioDataToFloat(ad), 48000), error: ()=>{ st.dec=null; }});
+      st.dec.configure(OPUS_DEC); st.ts=0;
+    }
+    st.dec.decode(new EncodedAudioChunk({type:'key', timestamp:st.ts, data}));
+    st.ts+=20000;
+  } catch { st.dec=null; }
+}
+function schedule(name, f32, rate){
+  if (!ctx || !powered || vc.active || !f32.length) return;
+  const ab=ctx.createBuffer(1,f32.length,rate); ab.getChannelData(0).set(f32);
+  let peak=0; for (let i=0;i<f32.length;i++){ const a=Math.abs(f32[i]); if(a>peak) peak=a; }
   const st = rx[name] || (rx[name]={next:0, target:0.15, calm:0});
   const now=ctx.currentTime;
   // Jitter buffer that never cuts speech: grows after a gap, and removes lag
@@ -411,6 +472,57 @@ function play(buf){
   st.src=(st.src||[]).filter(x=>x.endAt>now); s.endAt=st.next; st.src.push(s);
   markTalker(name, peak);
 }
+
+// ---------- voice messages (kept by the server while you were off) ----------
+let vmList=[], vmBusy=false, vmSrc=null;
+function vmRender(){ const b=$('vmBtn'); b.classList.toggle('hidden', !vmList.length); $('vmN').textContent=vmList.length; b.classList.toggle('playing', vmBusy); }
+async function vmDecode(buf){
+  const u8=new Uint8Array(buf), parts=[]; let i=0, dec=null, ts=0;
+  const outs=[];
+  while (i+2<=u8.length){
+    const n=(u8[i]<<8)|u8[i+1]; i+=2; if (i+n>u8.length) break;
+    const fr=u8.subarray(i,i+n); i+=n; if (n<2) continue;
+    if ((fr[0]&0x7f)===0){ parts.push({k:0, f:pcmToFloat(fr.slice(1))}); }
+    else {
+      if (!dec){ dec=new AudioDecoder({output: ad=>outs.push(audioDataToFloat(ad)), error: ()=>{}}); dec.configure(OPUS_DEC); }
+      dec.decode(new EncodedAudioChunk({type:'key', timestamp:ts, data:fr.subarray(1)})); ts+=20000; parts.push({k:1});
+    }
+  }
+  if (dec){ try{ await dec.flush(); }catch{} dec.close(); }
+  // build one buffer at 48 kHz
+  let total=0; const segs=[]; let oi=0;
+  for (const p of parts){
+    if (p.k===0){ const up=new Float32Array(p.f.length*3); for (let j=0;j<up.length;j++) up[j]=p.f[Math.floor(j/3)]; segs.push(up); total+=up.length; }
+    else if (oi<outs.length){ segs.push(outs[oi]); total+=outs[oi].length; oi++; }
+  }
+  const out=new Float32Array(total); let o=0; for (const sg of segs){ out.set(sg,o); o+=sg.length; }
+  return out;
+}
+async function vmPlayAll(){
+  if (vmBusy){ vmBusy=false; if (vmSrc) try{vmSrc.stop()}catch{}; vmRender(); return; }
+  await ensureAudio(); vmBusy=true; vmRender();
+  while (vmBusy && vmList.length){
+    const m=vmList[0];
+    try {
+      const r=await fetch(base+'api/vm/'+m.id, {cache:'no-store'});
+      if (r.ok){
+        const f=await vmDecode(await r.arrayBuffer());
+        if (f.length){
+          toast('✉ '+m.from+' · '+new Date(m.at).toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit'}));
+          const ab=ctx.createBuffer(1,f.length,48000); ab.getChannelData(0).set(f);
+          await new Promise(res=>{ vmSrc=ctx.createBufferSource(); vmSrc.buffer=ab; vmSrc.connect(ctx.destination); vmSrc.onended=res; vmSrc.start(); });
+          vmSrc=null;
+          if (!vmBusy) break;
+        }
+      }
+      fetch(base+'api/vm/'+m.id, {method:'DELETE'});
+    } catch {}
+    vmList.shift(); vmRender();
+  }
+  vmBusy=false; vmRender();
+}
+$('vmBtn').onclick = vmPlayAll;
+
 function markTalker(name, peak){
   const st = rx[name];
   if (!txOn) $('meter').style.width=Math.min(100,peak*160)+'%';
@@ -437,7 +549,7 @@ async function setTx(){
 
 // ---------- power ----------
 async function powerOn(){
-  await ensureAudio(); powered=true; connect(); render();
+  await ensureAudio(); await checkOpus(); powered=true; connect(); render();
   if (window.isSecureContext) ensureMic();
   try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
   if (APP) APP.power(true);
