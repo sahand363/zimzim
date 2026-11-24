@@ -46,6 +46,7 @@ type Hub struct {
 	clients map[*client]bool
 	calls   *callState
 	vm      *vmail
+	files   *fileBox
 	vmu     sync.Mutex
 	voice   map[string]voiceOwner // walkie -> the one connection whose audio we pass on
 }
@@ -70,8 +71,17 @@ func (h *Hub) voiceFrom(c *client) bool {
 }
 
 func NewHub(s *Store) *Hub {
-	return &Hub{store: s, clients: map[*client]bool{}, calls: newCallState(), voice: map[string]voiceOwner{},
-		vm: newVmail(filepath.Join(filepath.Dir(s.path), "vm"))}
+	h := &Hub{store: s, clients: map[*client]bool{}, calls: newCallState(), voice: map[string]voiceOwner{},
+		vm:    newVmail(filepath.Join(filepath.Dir(s.path), "vm")),
+		files: newFileBox(filepath.Join(filepath.Dir(s.path), "files"))}
+	go func() {
+		for {
+			h.vm.sweep()
+			h.files.sweep()
+			time.Sleep(time.Hour)
+		}
+	}()
+	return h
 }
 
 // shared returns the codes that are ON on both walkies (case-insensitive).
@@ -289,6 +299,7 @@ func (h *Hub) Serve(ws *wsConn, walkieID string) {
 			c.opus.Store(m.Opus)
 			h.broadcastState()
 			sendJSON(c, map[string]any{"t": "vmlist", "list": h.vm.list(walkieID)})
+			sendJSON(c, map[string]any{"t": "filelist", "list": h.files.list(walkieID)})
 		}
 	}
 }

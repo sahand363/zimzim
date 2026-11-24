@@ -89,6 +89,7 @@ class Bridge(private val app: Context) {
     }
     @JavascriptInterface fun changeLink() = ui.post { Walkie.activity?.confirmChangeLink() }
     @JavascriptInterface fun isApp() = true
+    @JavascriptInterface fun download(url: String, name: String) = Files.download(app, url, name)
     @JavascriptInterface fun setEarpiece(on: Boolean) = ui.post { Walkie.setEarpiece(app, on) }
     @JavascriptInterface fun getKeepAlive() = Walkie.keepAlive(app)
     @JavascriptInterface fun setKeepAlive(on: Boolean) { prefs.edit().putBoolean("keep_alive", on).apply() }

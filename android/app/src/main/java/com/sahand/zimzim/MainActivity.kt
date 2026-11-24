@@ -39,6 +39,7 @@ class MainActivity : Activity() {
         get() = Walkie.web
         set(v) { Walkie.web = v }
     private var pendingPermission: PermissionRequest? = null
+    private var pendingFiles: android.webkit.ValueCallback<Array<Uri>>? = null
     private val prefs by lazy { getSharedPreferences("zimzim", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -204,6 +205,16 @@ class MainActivity : Activity() {
             }
         }
         w.webChromeClient = object : WebChromeClient() {
+            // "Send a file": open the phone's file picker.
+            override fun onShowFileChooser(view: WebView, cb: android.webkit.ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
+                val a = Walkie.activity ?: run { cb.onReceiveValue(null); return true }
+                a.pendingFiles?.onReceiveValue(null)
+                a.pendingFiles = cb
+                val pick = Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                try { a.startActivityForResult(Intent.createChooser(pick, "Send a file"), REQ_FILE) }
+                catch (_: Exception) { a.pendingFiles = null; cb.onReceiveValue(null) }
+                return true
+            }
             override fun onPermissionRequest(request: PermissionRequest) {
                 w.post {
                     if (Uri.parse(request.origin.toString()).host != host) { request.deny(); return@post }
@@ -253,6 +264,16 @@ class MainActivity : Activity() {
         }
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(code: Int, result: Int, data: Intent?) {
+        super.onActivityResult(code, result, data)
+        if (code == REQ_FILE) {
+            val uri = data?.data
+            pendingFiles?.onReceiveValue(if (result == RESULT_OK && uri != null) arrayOf(uri) else null)
+            pendingFiles = null
+        }
+    }
+
     fun confirmChangeLink() {
         AlertDialog.Builder(this)
             .setMessage("Change the walkie link?")
@@ -285,5 +306,6 @@ class MainActivity : Activity() {
         const val EXTRA_QUIT = "quit"
         const val REQ_MIC = 1
         const val REQ_START = 2
+        const val REQ_FILE = 3
     }
 }

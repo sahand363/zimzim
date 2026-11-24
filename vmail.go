@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,6 +28,7 @@ type vmMeta struct {
 	From string `json:"from"`
 	At   int64  `json:"at"` // unix ms
 	Ms   int    `json:"ms"`
+	Read bool   `json:"read"`
 }
 
 type vmRec struct {
@@ -199,7 +199,11 @@ func (v *vmail) list(walkieID string) []vmMeta {
 		var m vmMeta
 		if json.Unmarshal(line, &m) != nil || time.Since(time.UnixMilli(m.At)) > vmKeep {
 			os.Remove(p)
+			os.Remove(strings.TrimSuffix(p, ".zvm") + ".read")
 			continue
+		}
+		if _, err := os.Stat(strings.TrimSuffix(p, ".zvm") + ".read"); err == nil {
+			m.Read = true
 		}
 		out = append(out, m)
 	}
@@ -210,7 +214,7 @@ func (v *vmail) list(walkieID string) []vmMeta {
 func (v *vmail) prune(walkieID string) {
 	l := v.list(walkieID)
 	for len(l) > vmPerBox {
-		os.Remove(filepath.Join(v.box(walkieID), l[0].ID+".zvm"))
+		v.remove(walkieID, l[0].ID)
 		l = l[1:]
 	}
 }
@@ -246,9 +250,28 @@ func (v *vmail) open(walkieID, id string) ([]byte, bool) {
 func (v *vmail) remove(walkieID, id string) {
 	if validID(id) {
 		os.Remove(filepath.Join(v.box(walkieID), id+".zvm"))
+		os.Remove(filepath.Join(v.box(walkieID), id+".read"))
+	}
+}
+
+// markRead keeps the message (until it expires) but stops counting it as new.
+func (v *vmail) markRead(walkieID, id string) {
+	if validID(id) {
+		if _, err := os.Stat(filepath.Join(v.box(walkieID), id+".zvm")); err == nil {
+			os.WriteFile(filepath.Join(v.box(walkieID), id+".read"), nil, 0600)
+		}
+	}
+}
+
+// sweep drops expired messages in every box, so disk space comes back even if nobody looks.
+func (v *vmail) sweep() {
+	ents, _ := os.ReadDir(v.dir)
+	for _, e := range ents {
+		if e.IsDir() {
+			v.list(e.Name())
+		}
 	}
 }
 
 func (v *vmail) removeAll(walkieID string) { os.RemoveAll(v.box(walkieID)) }
 
-var _ = io.EOF

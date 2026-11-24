@@ -77,9 +77,26 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 @media (max-width:380px){.controls .iconbtn{width:36px;height:36px}.controls .iconbtn svg{width:18px;height:18px}.switch{gap:6px;letter-spacing:1px}}
 .iconbtn:active{transform:translateY(2px);box-shadow:0 1px 0 #0b0d0a}
 .iconbtn svg{width:20px;height:20px}
-.vmbtn{position:relative;color:var(--green)}
-.vmbtn b{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ff5b36;color:#fff;font:700 10px/17px system-ui;text-align:center}
-.vmbtn.playing{animation:vmp 1s infinite}@keyframes vmp{50%{opacity:.45}}
+.topr{display:flex;align-items:center;gap:10px}
+.boxbtn{position:relative;width:34px;height:34px;border-radius:11px;border:0;background:#1b1e18;color:#8e968a;box-shadow:0 2px 0 #0b0d0a,inset 0 1px 0 #ffffff10;display:grid;place-items:center;cursor:pointer}
+.boxbtn svg{width:17px;height:17px}.boxbtn.has{color:var(--green)}
+.boxbtn:active{transform:translateY(2px);box-shadow:none}
+.boxbtn b{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ff5b36;color:#fff;font:700 10px/17px system-ui;text-align:center}
+.boxbtn b:empty{display:none}
+.boxbtn.playing{animation:vmp 1s infinite}@keyframes vmp{50%{opacity:.45}}
+.item{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid #22261f}
+.item .tx{flex:1;min-width:0}
+.item .t1{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .t2{font-size:11px;color:var(--muted);margin-top:2px}
+.item.new .t1::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:#ff5b36;margin-right:7px;vertical-align:1px}
+.item .go{width:36px;height:36px;border-radius:50%;border:0;background:#22271f;color:#dfe6d8;display:grid;place-items:center;cursor:pointer;flex:none}
+.item .go svg{width:16px;height:16px}.item .go.on{background:var(--orange);color:#fff}
+.item .del{background:none;border:0;color:#6d7568;font-size:20px;cursor:pointer;padding:0 4px}
+.empty{color:var(--muted);font-size:13px;padding:18px 0;text-align:center}
+.bigbtn{width:100%;padding:12px;border:0;border-radius:14px;background:var(--orange);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:6px}
+.bigbtn:disabled{opacity:.6}
+.prog{height:5px;border-radius:3px;background:#0e100d;overflow:hidden;margin:4px 0 8px;display:none}
+.prog.on{display:block}.prog i{display:block;height:100%;width:0;background:var(--orange)}
 .chbtn{font:700 12px/1 ui-monospace,monospace;letter-spacing:1px}
 .iconbtn.lit{color:var(--orange);box-shadow:0 3px 0 #0b0d0a,inset 0 0 0 1px #e2552f66}
 .iconbtn.ring{animation:ring .5s ease-in-out 4}
@@ -189,7 +206,11 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
     <div class="antenna"><div class="tip" id="tip"></div></div>
     <div class="top">
       <div class="brand">ZIMZIM</div>
-      <button class="knob pulse" id="power" aria-label="Power"></button>
+      <div class="topr">
+        <button class="boxbtn" id="vmBtn" aria-label="Voice messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg><b id="vmN"></b></button>
+        <button class="boxbtn" id="fileBtn" aria-label="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg><b id="fileN"></b></button>
+        <button class="knob pulse" id="power" aria-label="Power"></button>
+      </div>
     </div>
     <div class="lcd" id="lcd">
       <div class="row"><span id="lName">—</span><span id="lCh">OFF</span></div>
@@ -202,7 +223,6 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
       <div class="switch" id="live"><div class="track"></div>LIVE</div>
       <div style="display:flex;gap:8px">
         <button class="iconbtn hidden" id="earBtn" aria-label="Earpiece"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg></button>
-        <button class="iconbtn vmbtn hidden" id="vmBtn" aria-label="Voice messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg><b id="vmN">1</b></button>
         <button class="iconbtn" id="pageBtn" aria-label="Page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
         <button class="iconbtn chbtn" id="chBtn" aria-label="Codes">CH</button>
         <div class="ctrlwrap">
@@ -242,6 +262,19 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
   <div class="peers" id="peerList"></div>
   <div class="setrow hidden" id="keepRow"><span>Stay on when I close the app</span><div class="mini" id="keepSw"></div></div>
 </div>
+<div class="sheet" id="vmSheet">
+  <h3>Voice messages</h3>
+  <p class="hint">What friends said while you were off. Kept for 7 days.</p>
+  <button class="bigbtn hidden" id="vmAll">Play new</button>
+  <div id="vmItems"></div>
+</div>
+<div class="sheet" id="fileSheet">
+  <h3>Files</h3>
+  <p class="hint">Goes to everyone who shares a code with you, even if they're off. Max 50 MB. Deleted after 7 days.</p>
+  <button class="bigbtn" id="fileSend">Send a file</button><input type="file" id="filePick" hidden>
+  <div class="prog" id="fileProg"><i></i></div>
+  <div id="fileItems"></div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -271,7 +304,7 @@ async function boot(){
   }
   me = await r.json();
   $('stage').classList.remove('hidden');
-  render();
+  render(); vmLoad(); fileLoad();
 }
 $('login').onsubmit = async e => {
   e.preventDefault(); $('lerr').textContent='';
@@ -334,9 +367,10 @@ function saveCodes(){ render(); send({t:'codes', codes:me.codes}); if(!ws||ws.re
 $('addForm').onsubmit = e => { e.preventDefault(); const v=$('addIn').value.trim(); if(!v) return;
   if (me.codes.some(c=>c.code.toLowerCase()===v.toLowerCase())) { toast('Already added'); return; }
   me.codes.push({code:v,on:true}); $('addIn').value=''; saveCodes(); };
-function openSheet(o){ $('sheet').classList.toggle('open',o); $('veil').classList.toggle('open',o); }
+function openPane(id){ for (const x of ['sheet','vmSheet','fileSheet']) $(x).classList.toggle('open', x===id); $('veil').classList.toggle('open', !!id); }
+function openSheet(o){ openPane(o?'sheet':null); }
 $('chBtn').onclick = () => openSheet(true);
-$('veil').onclick = () => openSheet(false);
+$('veil').onclick = () => openPane(null);
 
 // ---------- socket ----------
 function send(o){ if (ws && ws.readyState===1) ws.send(JSON.stringify(o)); }
@@ -356,7 +390,8 @@ function connect(){
       render();
     }
     else if (m.t==='page'){ paged(m.from); }
-    else if (m.t==='vmlist'){ vmList=m.list||[]; vmRender(); if (vmList.length){ toast('✉ '+vmList.length+' voice message'+(vmList.length>1?'s':'')); if (navigator.vibrate) navigator.vibrate([30,80,30]); } }
+    else if (m.t==='vmlist'){ vmSet(m.list, true); }
+    else if (m.t==='filelist'){ fileSet(m.list, m.new ? m : null); }
     else if (m.t==='vmsaved'){ toast('Saved as a voice message for '+m.to.join(', ')); }
     else if (m.t && m.t[0]==='v' && m.t.length>2 && onVideo(m)) {}
     else if (m.t==='msg'){ whisper(m.from, m.text, false); if (navigator.vibrate) navigator.vibrate([20,60,20]); }
@@ -474,8 +509,24 @@ function schedule(name, f32, rate){
 }
 
 // ---------- voice messages (kept by the server while you were off) ----------
-let vmList=[], vmBusy=false, vmSrc=null;
-function vmRender(){ const b=$('vmBtn'); b.classList.toggle('hidden', !vmList.length); $('vmN').textContent=vmList.length; b.classList.toggle('playing', vmBusy); }
+let vmList=[], vmBusy=null, vmSrc=null;
+const fmtWhen = t => new Date(t).toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit'});
+const fmtLen = ms => { const s=Math.max(1,Math.round(ms/1000)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
+const daysLeft = t => { const d=Math.ceil((t+7*864e5-Date.now())/864e5); return d<=1 ? 'deleted today' : d+' days left'; };
+const esc = t => String(t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const icoPlay='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>', icoStop='<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+function vmSet(list, fromServer){
+  const before=vmList.filter(m=>!m.read).length;
+  vmList=(list||[]).sort((x,y)=>y.at-x.at); vmRender();
+  const now=vmList.filter(m=>!m.read).length;
+  if (fromServer && now>before){ toast('✉ '+now+' new voice message'+(now>1?'s':'')); if (navigator.vibrate) navigator.vibrate([30,80,30]); }
+}
+function vmRender(){
+  const n=vmList.filter(m=>!m.read).length, b=$('vmBtn');
+  $('vmN').textContent=n||''; b.classList.toggle('has', n>0); b.classList.toggle('playing', !!vmBusy);
+  $('vmAll').classList.toggle('hidden', !n && !vmBusy); $('vmAll').textContent = vmBusy ? 'Stop' : 'Play new ('+n+')';
+  $('vmItems').innerHTML = vmList.length ? vmList.map(m=>`<div class="item${m.read?'':' new'}"><button class="go${vmBusy===m.id?' on':''}" data-p="${m.id}">${vmBusy===m.id?icoStop:icoPlay}</button><div class="tx"><div class="t1">${esc(m.from)}</div><div class="t2">${fmtWhen(m.at)} · ${fmtLen(m.ms)} · ${daysLeft(m.at)}</div></div><button class="del" data-d="${m.id}">×</button></div>`).join('') : '<div class="empty">No voice messages</div>';
+}
 async function vmDecode(buf){
   const u8=new Uint8Array(buf), parts=[]; let i=0, dec=null, ts=0;
   const outs=[];
@@ -498,30 +549,82 @@ async function vmDecode(buf){
   const out=new Float32Array(total); let o=0; for (const sg of segs){ out.set(sg,o); o+=sg.length; }
   return out;
 }
-async function vmPlayAll(){
-  if (vmBusy){ vmBusy=false; if (vmSrc) try{vmSrc.stop()}catch{}; vmRender(); return; }
-  await ensureAudio(); vmBusy=true; vmRender();
-  while (vmBusy && vmList.length){
-    const m=vmList[0];
+function vmStop(){ vmBusy=null; vmQueue=[]; if (vmSrc) try{vmSrc.stop()}catch{}; vmRender(); }
+let vmQueue=[];
+async function vmPlay(ids){
+  vmStop(); await ensureAudio(); vmQueue=ids.slice();
+  while (vmQueue.length){
+    const id=vmQueue.shift(), m=vmList.find(x=>x.id===id); if (!m) continue;
+    vmBusy=id; vmRender();
     try {
-      const r=await fetch(base+'api/vm/'+m.id, {cache:'no-store'});
+      const r=await fetch(base+'api/vm/'+id, {cache:'no-store'});
       if (r.ok){
+        m.read=true; vmRender();
         const f=await vmDecode(await r.arrayBuffer());
-        if (f.length){
-          toast('✉ '+m.from+' · '+new Date(m.at).toLocaleString([], {weekday:'short', hour:'2-digit', minute:'2-digit'}));
+        if (f.length && vmBusy===id){
           const ab=ctx.createBuffer(1,f.length,48000); ab.getChannelData(0).set(f);
           await new Promise(res=>{ vmSrc=ctx.createBufferSource(); vmSrc.buffer=ab; vmSrc.connect(ctx.destination); vmSrc.onended=res; vmSrc.start(); });
           vmSrc=null;
-          if (!vmBusy) break;
         }
       }
-      fetch(base+'api/vm/'+m.id, {method:'DELETE'});
     } catch {}
-    vmList.shift(); vmRender();
+    if (vmBusy!==id) return;
   }
-  vmBusy=false; vmRender();
+  vmBusy=null; vmRender();
 }
-$('vmBtn').onclick = vmPlayAll;
+async function vmLoad(){ try { const j=await (await fetch(base+'api/vm',{cache:'no-store'})).json(); vmSet(j.list, false); } catch {} }
+$('vmBtn').onclick = () => { openPane('vmSheet'); vmLoad(); };
+$('vmAll').onclick = () => { if (vmBusy){ vmStop(); return; } vmPlay(vmList.filter(m=>!m.read).sort((x,y)=>x.at-y.at).map(m=>m.id)); };
+$('vmItems').onclick = e => {
+  const p=e.target.closest('[data-p]'), d=e.target.closest('[data-d]');
+  if (p){ if (vmBusy===p.dataset.p) vmStop(); else vmPlay([p.dataset.p]); }
+  if (d){ const id=d.dataset.d; if (vmBusy===id) vmStop(); fetch(base+'api/vm/'+id,{method:'DELETE'}); vmList=vmList.filter(m=>m.id!==id); vmRender(); }
+};
+
+// ---------- files ----------
+let fileList=[];
+const fmtSize = n => n<1024 ? n+' B' : n<1048576 ? (n/1024).toFixed(0)+' KB' : (n/1048576).toFixed(1)+' MB';
+const icoDown='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>';
+function fileSet(list, news){
+  fileList=list||[]; fileRender();
+  if (news){
+    toast('📎 '+news.from+': '+news.new); if (navigator.vibrate) navigator.vibrate([30,80,30]);
+    if (document.hidden && window.ZimZimApp && ZimZimApp.alert) try{ ZimZimApp.alert('📎 '+news.from+' sent a file', news.new); }catch{}
+  }
+}
+function fileRender(){
+  const n=fileList.filter(f=>!f.read).length;
+  $('fileN').textContent=n||''; $('fileBtn').classList.toggle('has', n>0);
+  $('fileItems').innerHTML = fileList.length ? fileList.map(f=>`<div class="item${f.read?'':' new'}"><button class="go" data-g="${f.id}">${icoDown}</button><div class="tx"><div class="t1" dir="auto">${esc(f.name)}</div><div class="t2">${esc(f.from)} · ${fmtSize(f.size)} · ${daysLeft(f.at)}</div></div><button class="del" data-d="${f.id}">×</button></div>`).join('') : '<div class="empty">No files</div>';
+}
+async function fileLoad(){ try { const j=await (await fetch(base+'api/files',{cache:'no-store'})).json(); fileList=j.list||[]; fileRender(); } catch {} }
+$('fileBtn').onclick = () => { openPane('fileSheet'); fileLoad(); };
+$('fileItems').onclick = e => {
+  const g=e.target.closest('[data-g]'), d=e.target.closest('[data-d]');
+  if (g){
+    const f=fileList.find(x=>x.id===g.dataset.g); if (!f) return;
+    const url=new URL(base+'api/files/'+f.id, location.href).href;
+    if (window.ZimZimApp && ZimZimApp.download) ZimZimApp.download(url, f.name);
+    else { const a=document.createElement('a'); a.href=url; a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); }
+    f.read=true; fileRender();
+  }
+  if (d){ const id=d.dataset.d; fetch(base+'api/files/'+id,{method:'DELETE'}); fileList=fileList.filter(f=>f.id!==id); fileRender(); }
+};
+$('fileSend').onclick = () => $('filePick').click();
+$('filePick').onchange = () => {
+  const f=$('filePick').files[0]; $('filePick').value=''; if (!f) return;
+  if (f.size>50*1048576){ toast('Too big. Max 50 MB.'); return; }
+  const x=new XMLHttpRequest(), bar=$('fileProg');
+  x.open('POST', base+'api/files?name='+encodeURIComponent(f.name));
+  bar.classList.add('on'); bar.firstChild.style.width='0'; $('fileSend').disabled=true; $('fileSend').textContent='Sending…';
+  x.upload.onprogress = e => { if (e.lengthComputable) bar.firstChild.style.width=(100*e.loaded/e.total)+'%'; };
+  x.onloadend = () => {
+    bar.classList.remove('on'); $('fileSend').disabled=false; $('fileSend').textContent='Send a file';
+    let j={}; try{ j=JSON.parse(x.responseText); }catch{}
+    if (x.status===200) toast('📎 Sent to '+(j.to||[]).join(', ')); else toast(j.error || 'Could not send the file');
+  };
+  x.send(f);
+};
 
 function markTalker(name, peak){
   const st = rx[name];
