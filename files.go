@@ -19,11 +19,30 @@ import (
 // for them for 7 days (online or not), then deletes it.
 
 const (
-	fileMax     = 50 << 20 // 50 MB per file
-	fileKeep    = 7 * 24 * time.Hour
-	filePerBox  = 30
-	fileBoxSize = 500 << 20 // at most 500 MB waiting for one walkie
+	fileMaxDefault = 50 // MB per file unless the admin changes it (menu: File size limit)
+	fileMaxTop     = 2000
+	fileKeep       = 7 * 24 * time.Hour
+	filePerBox     = 30
 )
+
+// fileMaxBytes is the per-file limit from config (MB), 50 MB by default.
+func (h *Hub) fileMaxBytes() int64 {
+	h.store.mu.RLock()
+	mb := h.store.cfg.FileMaxMB
+	h.store.mu.RUnlock()
+	if mb <= 0 {
+		mb = fileMaxDefault
+	}
+	return int64(mb) << 20
+}
+
+// boxLimit: at most this much waiting for one walkie (500 MB, or 4 files' worth if the limit is big).
+func boxLimit(max int64) int64 {
+	if b := 4 * max; b > 500<<20 {
+		return b
+	}
+	return 500 << 20
+}
 
 type fileMeta struct {
 	ID   string `json:"id"`
@@ -128,7 +147,7 @@ func (f *fileBox) sweep() {
 }
 
 // add puts the uploaded temp file into w's box (hard link, or copy if that fails).
-func (f *fileBox) add(w string, m fileMeta, tmp string) error {
+func (f *fileBox) add(w string, m fileMeta, tmp string, boxSize int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	dir := f.box(w)
@@ -141,7 +160,7 @@ func (f *fileBox) add(w string, m fileMeta, tmp string) error {
 		used += x.Size
 	}
 	// make room: drop the oldest until it fits
-	for len(l) > 0 && (len(l) >= filePerBox || used+m.Size > fileBoxSize) {
+	for len(l) > 0 && (len(l) >= filePerBox || used+m.Size > boxSize) {
 		old := l[len(l)-1]
 		f.removeLocked(w, old.ID)
 		used -= old.Size
@@ -201,6 +220,28 @@ func (f *fileBox) get(w, id string) (fileMeta, string, bool) {
 	return m, filepath.Join(f.box(w), id+".bin"), true
 }
 
+type fileTarget struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Online bool   `json:"online"`
+}
+
+// fileTargets: who this walkie can send a file to right now, with online state.
+func (h *Hub) fileTargets(id string) []fileTarget {
+	on := map[string]bool{}
+	h.mu.RLock()
+	for c := range h.clients {
+		on[c.walkieID] = true
+	}
+	h.mu.RUnlock()
+	var out []fileTarget
+	for _, t := range h.sharedWith(id) {
+		out = append(out, fileTarget{ID: t, Name: h.nameOf(t), Online: on[t]})
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out
+}
+
 // sharedWith: every other walkie that shares an ON code with id (online or not).
 func (h *Hub) sharedWith(id string) []string {
 	h.store.mu.RLock()
@@ -230,13 +271,31 @@ func (h *Hub) tellWalkie(id string, v any) {
 // fileUpload handles POST api/files?name=… with the raw file as the body.
 func (a *App) fileUpload(w http.ResponseWriter, r *http.Request, wk *Walkie) {
 	h := a.hub
-	to := h.sharedWith(wk.ID)
-	if len(to) == 0 {
-		writeJSON(w, 400, map[string]string{"error": "Nobody shares a code with you."})
+	// Only the walkies the sender picked, and only if they still share an ON code.
+	pick := map[string]bool{}
+	for _, t := range strings.Split(r.URL.Query().Get("to"), ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			pick[t] = true
+		}
+	}
+	var to []string
+	for _, t := range h.sharedWith(wk.ID) {
+		if pick[t] {
+			to = append(to, t)
+		}
+	}
+	if len(pick) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "Pick who gets it."})
 		return
 	}
+	if len(to) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "They no longer share a code with you."})
+		return
+	}
+	fileMax := h.fileMaxBytes()
+	tooBig := fmt.Sprintf("Too big. Max %d MB.", fileMax>>20)
 	if r.ContentLength > fileMax {
-		writeJSON(w, 413, map[string]string{"error": "Too big. Max 50 MB."})
+		writeJSON(w, 413, map[string]string{"error": tooBig})
 		return
 	}
 	name := cleanFileName(r.URL.Query().Get("name"))
@@ -252,7 +311,7 @@ func (a *App) fileUpload(w http.ResponseWriter, r *http.Request, wk *Walkie) {
 	n, err := io.Copy(tf, http.MaxBytesReader(w, r.Body, fileMax))
 	tf.Close()
 	if err != nil {
-		writeJSON(w, 413, map[string]string{"error": "Upload failed or file over 50 MB."})
+		writeJSON(w, 413, map[string]string{"error": "Upload failed or " + strings.ToLower(tooBig[:1]) + tooBig[1:]})
 		return
 	}
 	if n == 0 {
@@ -262,7 +321,7 @@ func (a *App) fileUpload(w http.ResponseWriter, r *http.Request, wk *Walkie) {
 	m := fileMeta{ID: randHex(8), From: h.nameOf(wk.ID), Name: name, Size: n, At: time.Now().UnixMilli()}
 	var names []string
 	for _, id := range to {
-		if h.files.add(id, m, tmp) == nil {
+		if h.files.add(id, m, tmp, boxLimit(fileMax)) == nil {
 			names = append(names, h.nameOf(id))
 			h.tellWalkie(id, map[string]any{"t": "filelist", "list": h.files.list(id), "new": m.Name, "from": m.From})
 		}

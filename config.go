@@ -43,6 +43,7 @@ type Config struct {
 	TurnSecret  string    `json:"turn_secret"`
 	TurnPort    int       `json:"turn_port"`
 	TurnHost    string    `json:"turn_host"`
+	FileMaxMB   int       `json:"file_max_mb,omitempty"`
 	Walkies     []*Walkie `json:"walkies"`
 }
 

@@ -152,6 +152,14 @@ change_port(){
   restart
 }
 
+file_limit(){
+  ask "Max size per file in MB [$(info file_max_mb)]"; local m=$REPLY
+  [ -z "$m" ] && return
+  [[ "$m" =~ ^[0-9]+$ ]] && [ "$m" -ge 1 ] && [ "$m" -le 2000 ] || { err "Enter a number from 1 to 2000"; return; }
+  zz set-file-max "$m" >/dev/null && ok "Files up to $m MB"
+  restart
+}
+
 video_relay(){
   if [ "$(info turn)" = "true" ]; then
     ok "Video relay is on (port $(info turn_port))"
@@ -236,6 +244,7 @@ while true; do
   ${OR}9${C0}  Update ZimZim
   ${OR}10${C0} Uninstall
   ${OR}11${C0} Video relay (for hidden video calls)
+  ${OR}12${C0} File size limit ${DIM}(now $(info file_max_mb) MB)${C0}
   ${OR}0${C0}  Exit
 
 EOF
@@ -253,6 +262,7 @@ EOF
     9) update ;;
     10) uninstall; pause ;;
     11) video_relay; pause ;;
+    12) file_limit; pause ;;
     0|q|"") clear; exit 0 ;;
   esac
 done

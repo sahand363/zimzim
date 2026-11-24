@@ -92,6 +92,16 @@ func main() {
 	case "clear-turn":
 		mutate(cfgPath, func(c *Config) error { c.TurnSecret, c.TurnPort, c.TurnHost = "", 0, ""; return nil })
 		fmt.Println("Video relay removed.")
+	case "set-file-max":
+		if len(args) != 1 {
+			die("usage: set-file-max MB")
+		}
+		mb, err := strconv.Atoi(args[0])
+		if err != nil || mb < 1 || mb > fileMaxTop {
+			die(fmt.Sprintf("size must be 1 to %d MB", fileMaxTop))
+		}
+		mutate(cfgPath, func(c *Config) error { c.FileMaxMB = mb; return nil })
+		fmt.Println("File size limit set to", mb, "MB")
 	case "new-admin-path":
 		mutate(cfgPath, func(c *Config) error { c.AdminPath = randWord(12); return nil })
 		fmt.Println("Admin link changed.")
@@ -101,7 +111,11 @@ func main() {
 			die(err.Error())
 		}
 		c := s.cfg
-		fmt.Printf("url=%s\nuser=%s\nport=%d\ndomain=%s\ntls=%v\nwalkies=%d\nturn=%v\nturn_port=%d\n", adminURL(c, ""), c.AdminUser, c.Port, c.Domain, c.Cert != "", len(c.Walkies), c.TurnSecret != "", c.TurnPort)
+		fm := c.FileMaxMB
+		if fm <= 0 {
+			fm = fileMaxDefault
+		}
+		fmt.Printf("url=%s\nuser=%s\nport=%d\ndomain=%s\ntls=%v\nwalkies=%d\nturn=%v\nturn_port=%d\nfile_max_mb=%d\n", adminURL(c, ""), c.AdminUser, c.Port, c.Domain, c.Cert != "", len(c.Walkies), c.TurnSecret != "", c.TurnPort, fm)
 	case "url":
 		s, err := LoadStore(cfgPath)
 		if err != nil {
@@ -121,7 +135,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("zimzim " + version + "\ncommands: serve | init [-port N] | set-admin USER PASS | set-port N | set-tls DOMAIN CERT KEY | clear-tls | set-turn SECRET PORT [HOST] | clear-turn | new-admin-path | info | url [HOST] | version")
+	fmt.Println("zimzim " + version + "\ncommands: serve | init [-port N] | set-admin USER PASS | set-port N | set-tls DOMAIN CERT KEY | clear-tls | set-turn SECRET PORT [HOST] | clear-turn | set-file-max MB | new-admin-path | info | url [HOST] | version")
 }
 
 func die(m string) { fmt.Fprintln(os.Stderr, m); os.Exit(1) }
@@ -452,7 +466,7 @@ func (a *App) walkie(w http.ResponseWriter, r *http.Request, wk *Walkie, slug, s
 			a.fileUpload(w, r, wk)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"list": a.hub.files.list(wk.ID), "max": fileMax})
+		writeJSON(w, 200, map[string]any{"list": a.hub.files.list(wk.ID), "max": a.hub.fileMaxBytes(), "to": a.hub.fileTargets(wk.ID)})
 	case "ws":
 		if !authed() {
 			http.Error(w, "login", 401)

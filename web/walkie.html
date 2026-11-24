@@ -97,6 +97,13 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 .bigbtn{width:100%;padding:12px;border:0;border-radius:14px;background:var(--orange);color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:6px}
 .bigbtn:disabled{opacity:.6}
 .prog{height:5px;border-radius:3px;background:#0e100d;overflow:hidden;margin:4px 0 8px;display:none}
+.keep{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--green);background:#1d2a1a;border-radius:8px;padding:3px 8px;margin:0 0 8px}
+.pick{display:none;background:#0f110e;border:1px solid #262a24;border-radius:14px;padding:10px 12px;margin:0 0 10px}.pick.on{display:block}
+.pick .pt{font-size:13px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick .who{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid #1d211b;cursor:pointer}
+.pick .who span{flex:1;font-size:14px}.pick .who i{font-style:normal;font-size:11px;color:var(--muted)}.pick .who i.on{color:var(--green)}
+.pick .row2{display:flex;gap:8px;margin-top:10px}.pick .row2 button{flex:1;margin:0}
+.pick .ghost{background:#22261f;color:#cfd6c8}
 .prog.on{display:block}.prog i{display:block;height:100%;width:0;background:var(--orange)}
 .chbtn{font:700 12px/1 ui-monospace,monospace;letter-spacing:1px}
 .iconbtn.lit{color:var(--orange);box-shadow:0 3px 0 #0b0d0a,inset 0 0 0 1px #e2552f66}
@@ -265,14 +272,18 @@ body{background:radial-gradient(120% 80% at 50% 0%,#1d211c 0%,var(--bg) 60%);col
 </div>
 <div class="sheet" id="vmSheet">
   <h3>Voice messages</h3>
-  <p class="hint">What friends said while you were off. Kept for 7 days.</p>
+  <div class="keep">KEPT FOR 7 DAYS</div>
+  <p class="hint">What friends said while you were off. They stay here for 7 days, even after you listen.</p>
   <button class="bigbtn hidden" id="vmAll">Play new</button>
   <div id="vmItems"></div>
 </div>
 <div class="sheet" id="fileSheet">
   <h3>Files</h3>
-  <p class="hint">Goes to everyone who shares a code with you, even if they're off. Max 50 MB. Deleted after 7 days.</p>
+  <div class="keep">KEPT FOR 7 DAYS</div>
+  <p class="hint">Files stay here for 7 days, even after you open them. You pick who gets each file. Max <span id="fileMaxT">50</span> MB.</p>
   <button class="bigbtn" id="fileSend">Send a file</button><input type="file" id="filePick" hidden>
+  <div class="pick" id="pickBox"><div class="pt" id="pickName" dir="auto"></div><div id="pickWho"></div>
+    <div class="row2"><button class="bigbtn ghost" id="pickNo">Cancel</button><button class="bigbtn" id="pickGo">Send</button></div></div>
   <div class="prog" id="fileProg"><i></i></div>
   <div id="fileItems"></div>
 </div>
@@ -598,7 +609,18 @@ function fileRender(){
   $('fileN').textContent=n||''; $('fileBtn').classList.toggle('has', n>0);
   $('fileItems').innerHTML = fileList.length ? fileList.map(f=>`<div class="item${f.read?'':' new'}"><button class="go" data-g="${f.id}">${icoDown}</button><div class="tx"><div class="t1" dir="auto">${esc(f.name)}</div><div class="t2">${esc(f.from)} · ${fmtSize(f.size)} · ${daysLeft(f.at)}</div></div><button class="del" data-d="${f.id}">×</button></div>`).join('') : '<div class="empty">No files</div>';
 }
-async function fileLoad(){ try { const j=await (await fetch(base+'api/files',{cache:'no-store'})).json(); fileList=j.list||[]; fileRender(); } catch {} }
+let fileMax=50*1048576, fileTo=[], pending=null, picked=new Set();
+async function fileLoad(){ try { const j=await (await fetch(base+'api/files',{cache:'no-store'})).json(); fileList=j.list||[]; if (j.max) fileMax=j.max; fileTo=j.to||[]; $('fileMaxT').textContent=Math.round(fileMax/1048576); fileRender(); } catch {} }
+function pickRender(){
+  $('pickBox').classList.toggle('on', !!pending); $('fileSend').classList.toggle('hidden', !!pending);
+  if (!pending) return;
+  $('pickName').textContent='Send “'+pending.name+'” ('+fmtSize(pending.size)+') to:';
+  $('pickWho').innerHTML = fileTo.length ? fileTo.map(t=>`<div class="who" data-w="${esc(t.id)}"><span dir="auto">${esc(t.name)}</span><i class="${t.online?'on':''}">${t.online?'online':'off'}</i><div class="mini${picked.has(t.id)?' on':''}"></div></div>`).join('') : '<div class="empty">Nobody shares a code with you</div>';
+  const n=fileTo.filter(t=>picked.has(t.id)).length;
+  $('pickGo').disabled=!n; $('pickGo').style.opacity=n?1:.4; $('pickGo').textContent=n?'Send to '+n:'Send';
+}
+$('pickWho').onclick = e => { const w=e.target.closest('[data-w]'); if (!w) return; const id=w.dataset.w; picked.has(id)?picked.delete(id):picked.add(id); pickRender(); };
+$('pickNo').onclick = () => { pending=null; pickRender(); };
 $('fileBtn').onclick = () => { openPane('fileSheet'); fileLoad(); };
 $('fileItems').onclick = e => {
   const g=e.target.closest('[data-g]'), d=e.target.closest('[data-d]');
@@ -612,11 +634,18 @@ $('fileItems').onclick = e => {
   if (d){ const id=d.dataset.d; fetch(base+'api/files/'+id,{method:'DELETE'}); fileList=fileList.filter(f=>f.id!==id); fileRender(); }
 };
 $('fileSend').onclick = () => $('filePick').click();
-$('filePick').onchange = () => {
+$('filePick').onchange = async () => {
   const f=$('filePick').files[0]; $('filePick').value=''; if (!f) return;
-  if (f.size>50*1048576){ toast('Too big. Max 50 MB.'); return; }
+  await fileLoad();
+  if (f.size>fileMax){ toast('Too big. Max '+Math.round(fileMax/1048576)+' MB.'); return; }
+  pending=f; picked=new Set(fileTo.length===1?[fileTo[0].id]:[]); pickRender();
+};
+$('pickGo').onclick = () => {
+  const f=pending; if (!f) return;
+  const to=fileTo.filter(t=>picked.has(t.id)).map(t=>t.id); if (!to.length) return;
+  pending=null; pickRender();
   const x=new XMLHttpRequest(), bar=$('fileProg');
-  x.open('POST', base+'api/files?name='+encodeURIComponent(f.name));
+  x.open('POST', base+'api/files?name='+encodeURIComponent(f.name)+'&to='+encodeURIComponent(to.join(',')));
   bar.classList.add('on'); bar.firstChild.style.width='0'; $('fileSend').disabled=true; $('fileSend').textContent='Sending…';
   x.upload.onprogress = e => { if (e.lengthComputable) bar.firstChild.style.width=(100*e.loaded/e.total)+'%'; };
   x.onloadend = () => {
