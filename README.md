@@ -1,5 +1,7 @@
 # ZimZim
 
+<p align="center"><img src="web/icon.svg" width="120" alt="ZimZim"></p>
+
 A tiny self-hosted walkie-talkie for your server. One Go binary, no database, no accounts in the cloud.
 
 - Make a walkie for anyone. Each one gets its own **secret link** plus a **username and password**.
